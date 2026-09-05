@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+build/
+dist/
+*.egg-info/
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Agent host artifacts
+.omo/
+graphify-out/
+
+# `.agentize/` needs no rule: it is machine state and carries its own `*`.
+# The policy it pairs with is `agentize.yaml` at the root, which is tracked.
