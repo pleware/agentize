@@ -21,6 +21,18 @@ CHECKSUMS = SCRIPTS / "checksums.txt"
 GIT_BASH = Path(r"C:\Program Files\Git\bin\bash.exe")
 
 
+def windows_powershell() -> str | None:
+    """Windows `powershell.exe`. Not `pwsh` — the README oneliner names powershell."""
+    return shutil.which("powershell")
+
+
+def require_windows_powershell() -> str:
+    found = windows_powershell()
+    if found is None:
+        pytest.skip("powershell is not installed")
+    return found
+
+
 def posix_shell() -> str | None:
     if GIT_BASH.is_file():
         return str(GIT_BASH)
@@ -195,6 +207,7 @@ def test_windows_oneliner_is_one_cmd_line_for_powershell_and_prompt():
 
 def test_powershell_installer_runs_through_iex(tmp_path: Path):
     """`irm | iex` evaluates in the current scope, unlike `-File`."""
+    ps = require_windows_powershell()
     dest = tmp_path / "project"
     dest.mkdir()
     env = {
@@ -208,7 +221,7 @@ def test_powershell_installer_runs_through_iex(tmp_path: Path):
         f"Invoke-Expression ((Get-Content -LiteralPath '{SCRIPTS / 'install.ps1'}') | Out-String)"
     )
     result = subprocess.run(
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        [ps, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
         cwd=REPO_ROOT,
         env=env,
         capture_output=True,
@@ -222,6 +235,7 @@ def test_powershell_installer_runs_through_iex(tmp_path: Path):
 
 
 def test_powershell_installer_plants_verified_launchers(tmp_path: Path):
+    ps = require_windows_powershell()
     dest = tmp_path / "project"
     dest.mkdir()
     env = {
@@ -233,7 +247,7 @@ def test_powershell_installer_plants_verified_launchers(tmp_path: Path):
     }
     result = subprocess.run(
         [
-            "powershell",
+            ps,
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
@@ -252,6 +266,7 @@ def test_powershell_installer_plants_verified_launchers(tmp_path: Path):
 
 
 def test_powershell_installer_rejects_a_bad_checksum(tmp_path: Path):
+    ps = require_windows_powershell()
     tree = tmp_path / "scripts"
     shutil.copytree(SCRIPTS, tree, ignore=shutil.ignore_patterns("install*"))
     first = (tree / "checksums.txt").read_text(encoding="utf-8").split()[0]
@@ -271,7 +286,7 @@ def test_powershell_installer_rejects_a_bad_checksum(tmp_path: Path):
     }
     result = subprocess.run(
         [
-            "powershell",
+            ps,
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
@@ -327,6 +342,9 @@ def test_posix_installer_downloads_uv_when_missing(tmp_path: Path):
 
 
 def test_powershell_installer_downloads_uv_when_missing(tmp_path: Path):
+    if platform.system() != "Windows":
+        pytest.skip("Windows uv zip is a Windows installer path")
+    ps = require_windows_powershell()
     release = tmp_path / "uv-release"
     asset = "uv-x86_64-pc-windows-msvc.zip"
     fake_uv_zip(release, asset)
@@ -346,7 +364,7 @@ def test_powershell_installer_downloads_uv_when_missing(tmp_path: Path):
     }
     result = subprocess.run(
         [
-            "powershell",
+            ps,
             "-NoProfile",
             "-ExecutionPolicy",
             "Bypass",
