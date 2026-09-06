@@ -163,6 +163,40 @@ def test_posix_installer_rejects_a_bad_checksum(tmp_path: Path):
     assert not (dest / "agentize").exists()
 
 
+def test_powershell_installer_does_not_touch_automatic_iswindows():
+    text = (SCRIPTS / "install.ps1").read_text(encoding="utf-8")
+    assert "$IsWindows" not in text
+    assert "$isWindows" not in text
+
+
+def test_powershell_installer_runs_through_iex(tmp_path: Path):
+    """`irm | iex` evaluates in the current scope, unlike `-File`."""
+    dest = tmp_path / "project"
+    dest.mkdir()
+    env = {
+        **os.environ,
+        "AGENTIZE_SKIP_OS_CHECK": "1",
+        "AGENTIZE_INSTALL_BASE": str(SCRIPTS),
+        "AGENTIZE_DEST": str(dest),
+        "AGENTIZE_UV_SKIP_PATH_WRITE": "1",
+    }
+    command = (
+        f"Get-Content -Raw -LiteralPath '{SCRIPTS / 'install.ps1'}' | Invoke-Expression"
+    )
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],
+        cwd=REPO_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr or result.stdout
+    assert "IsWindows" not in (result.stderr + result.stdout)
+    for name, text in FILES.items():
+        assert (dest / name).read_text(encoding="utf-8") == text
+
+
 def test_powershell_installer_plants_verified_launchers(tmp_path: Path):
     dest = tmp_path / "project"
     dest.mkdir()

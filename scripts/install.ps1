@@ -5,13 +5,9 @@
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$isWindows = $false
-if (Get-Variable IsWindows -ErrorAction SilentlyContinue) {
-  $isWindows = [bool]$IsWindows
-} elseif ($env:OS -eq "Windows_NT") {
-  $isWindows = $true
-}
-if (-not $isWindows -and $env:AGENTIZE_SKIP_OS_CHECK -ne "1") {
+# Do not assign to the automatic Windows flag: names are case-insensitive
+# and that variable is constant. `irm | iex` runs in the current scope.
+if ($env:OS -ne "Windows_NT" -and $env:AGENTIZE_SKIP_OS_CHECK -ne "1") {
   throw "agentize: this installer is for Windows; on Linux or macOS use the sh installers"
 }
 
