@@ -15,7 +15,9 @@ import zipfile
 from collections.abc import Callable
 from pathlib import Path
 from urllib.error import URLError
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
+
+DOWNLOAD_UA = "agentize (https://github.com/pleware/agentize)"
 
 from .config import Host
 from .errors import AgentizeError
@@ -40,7 +42,9 @@ OPENCODE_TAG = "https://github.com/sst/opencode/releases/download/{tag}/{asset}"
 OPENCODE_LATEST = (
     "https://github.com/sst/opencode/releases/latest/download/{asset}"
 )
-CURSOR_ARCHIVE = "https://downloads.cursor.com/lab/{pin}/{os}/{arch}/agent-cli-package.tar.gz"
+CURSOR_ARCHIVE = (
+    "https://downloads.cursor.com/lab/{pin}/{os}/{arch}/agent-cli-package.{ext}"
+)
 CURSOR_INSTALL = "https://cursor.com/install"
 CURSOR_LAB_PIN = re.compile(r"downloads\.cursor\.com/lab/([^/\s\"']+)/")
 
@@ -77,15 +81,17 @@ def archive_url(host: str, pin: str, os_name: str, arch: str) -> str:
         tag = pin if pin.startswith("v") else f"v{pin}"
         return OPENCODE_TAG.format(tag=tag, asset=asset)
     if host == "cursor":
-        return CURSOR_ARCHIVE.format(pin=pin, os=os_name, arch=arch)
+        ext = "zip" if os_name == "windows" else "tar.gz"
+        return CURSOR_ARCHIVE.format(pin=pin, os=os_name, arch=arch, ext=ext)
     raise AgentizeError(f"host {host!r} has no download recipe in this build")
 
 
 def download(url: str) -> bytes:
     if not url.startswith("https://"):
         raise AgentizeError(f"refusing to fetch a non-https URL: {url}")
+    request = Request(url, headers={"User-Agent": DOWNLOAD_UA})
     try:
-        with urlopen(url, timeout=60) as response:  # noqa: S310 — scheme checked above
+        with urlopen(request, timeout=60) as response:  # noqa: S310 — scheme checked above
             return response.read()
     except URLError as exc:
         raise AgentizeError(f"could not download {url}: {exc}") from exc

@@ -48,7 +48,10 @@ def test_archive_urls_are_https_and_pinned():
     )
     cursor = archive_url("cursor", "2026.09.02-c22c1a3", "linux", "x64")
     assert "2026.09.02-c22c1a3" in cursor
-    assert cursor.endswith("/agent-cli-package.tar.gz")
+    assert cursor.endswith("/linux/x64/agent-cli-package.tar.gz")
+    assert archive_url("cursor", "2026.09.02-c22c1a3", "windows", "x64").endswith(
+        "/windows/x64/agent-cli-package.zip"
+    )
     latest = archive_url("opencode", LATEST, "linux", "x64")
     assert latest.endswith("/latest/download/opencode-linux-x64.tar.gz")
 
