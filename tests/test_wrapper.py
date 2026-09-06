@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentize.cli import main
+from agentize.cli import build_parser, main
 from agentize.wrapper import (
     CMD_NAME,
     FILES,
@@ -47,6 +47,12 @@ def test_writing_wrappers_is_idempotent(tmp_path: Path):
     before = (tmp_path / UNIX_NAME).stat().st_mtime_ns
     write_wrappers(tmp_path)
     assert (tmp_path / UNIX_NAME).stat().st_mtime_ns == before
+
+
+def test_a_bare_host_flag_is_not_read_as_the_command():
+    parsed = build_parser().parse_args(["--host", "opencode"])
+    assert parsed.command is None
+    assert parsed.host == "opencode"
 
 
 def test_init_plants_the_launchers(tmp_path: Path):

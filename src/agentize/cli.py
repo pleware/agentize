@@ -39,6 +39,22 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="project root (default: current directory)",
     )
+    parser.add_argument(
+        "--host",
+        metavar="NAME",
+        help="host for run or fetch (default: the remembered or default host)",
+    )
+    parser.add_argument(
+        "--profile",
+        metavar="NAME",
+        help="profile for run or mount (default: the remembered or default profile)",
+    )
+    parser.add_argument(
+        "--global",
+        dest="use_global",
+        action="store_true",
+        help="use the host on PATH instead of the project's isolated copy",
+    )
     subcommands = parser.add_subparsers(dest="command")
     subcommands.add_parser("init", help=f"report where {CONFIG_NAME} goes and prepare data")
 
