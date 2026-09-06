@@ -1,0 +1,4 @@
+# This repository is written on Windows and run on Linux. Without this, a clone
+# on each platform gets different bytes, and agentize compares file contents to
+# decide whether a mount changed anything — a line ending would look like a diff.
+* text=auto eol=lf
