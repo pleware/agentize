@@ -32,7 +32,7 @@ curl -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/insta
 Windows (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1 | iex
+iex (curl.exe -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1)
 ```
 
 The files it writes (`agentize`, `agentize.ps1`, `agentize.cmd`) are

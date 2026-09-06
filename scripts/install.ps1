@@ -1,7 +1,7 @@
 # Plant agentize launchers in the current project (Windows).
 # If uv/uvx is missing, download a verified GitHub release into ~/.local/bin.
 # Usage:
-#   irm https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1 | iex
+#   iex (curl.exe -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1)
 $ErrorActionPreference = "Stop"
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
