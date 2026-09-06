@@ -27,6 +27,8 @@ def test_readme_example_parses_fully():
     assert set(config.hosts) == {"cursor", "opencode", "claude", "codex"}
     assert config.hosts["cursor"].emit_prefix == "auto."
     assert config.hosts["cursor"].pin == "latest"
+    assert config.hosts["cursor"].default
+    assert config.default_host is config.hosts["cursor"]
     assert config.hosts["opencode"].plugins == ("oh-my-openagent",)
     assert config.hosts["opencode"].pin == "latest"
     assert not config.hosts["claude"].enabled

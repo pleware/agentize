@@ -175,6 +175,7 @@ source: .agents
 
 hosts:
   cursor:
+    default: true               # bare `agentize` starts this until last.yaml remembers
     emit_prefix: auto.
     pin: latest                 # or omit; Cursor Agent updates itself
   opencode:

@@ -33,6 +33,7 @@ class GitIdentity:
 class Host:
     name: str
     enabled: bool = True
+    default: bool = False
     emit_prefix: str = ""
     plugins: tuple[str, ...] = ()
     """OpenCode plugin specs, in order. Ignored by hosts that have no plugin list."""
@@ -79,6 +80,13 @@ class Config:
         for profile in self.profiles.values():
             if profile.default:
                 return profile
+        return None
+
+    @property
+    def default_host(self) -> Host | None:
+        for host in self.hosts.values():
+            if host.default and host.enabled:
+                return host
         return None
 
     def enabled_hosts(self) -> tuple[Host, ...]:
@@ -130,6 +138,7 @@ def parse_config(raw: Any, origin: str = "<config>") -> Config:
 
     _check_references(profiles, servers, origin)
     _check_single_default(profiles, origin)
+    _check_single_default_host(hosts, origin)
 
     skills = _mapping(data.get("skills"), f"{origin}: skills")
     lock = skills.get("lock")
@@ -160,6 +169,9 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         enabled = body.get("enabled", True)
         if not isinstance(enabled, bool):
             raise ConfigError(f"{where}.enabled must be true or false")
+        default = body.get("default", False)
+        if not isinstance(default, bool):
+            raise ConfigError(f"{where}.default must be true or false")
         prefix = body.get("emit_prefix", "")
         if not isinstance(prefix, str):
             raise ConfigError(f"{where}.emit_prefix must be a string")
@@ -171,6 +183,7 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         hosts[name] = Host(
             name=name,
             enabled=enabled,
+            default=default,
             emit_prefix=prefix,
             plugins=_str_list(body.get("plugins"), f"{where}.plugins"),
             pin=_optional_str(body.get("pin"), f"{where}.pin"),
@@ -263,6 +276,12 @@ def _check_single_default(profiles: dict[str, Profile], origin: str) -> None:
     defaults = [name for name, profile in profiles.items() if profile.default]
     if len(defaults) > 1:
         raise ConfigError(f"{origin}: more than one default profile: {', '.join(sorted(defaults))}")
+
+
+def _check_single_default_host(hosts: dict[str, Host], origin: str) -> None:
+    defaults = [name for name, host in hosts.items() if host.default]
+    if len(defaults) > 1:
+        raise ConfigError(f"{origin}: more than one default host: {', '.join(sorted(defaults))}")
 
 
 def _mapping(value: Any, where: str) -> dict[str, Any]:

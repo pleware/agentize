@@ -33,8 +33,11 @@ def select_host(
         return enabled[0]
     if not enabled:
         raise AgentizeError("no host is enabled in the configuration")
+    if config.default_host is not None:
+        return config.default_host
     raise AgentizeError(
-        f"more than one host is enabled; name one with --host: {', '.join(names)}"
+        f"more than one host is enabled; name one with --host "
+        f"({', '.join(names)}) or mark one default: true"
     )
 
 

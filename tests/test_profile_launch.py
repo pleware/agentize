@@ -135,6 +135,33 @@ def test_several_enabled_hosts_require_a_choice():
         select_host(config, None)
 
 
+def test_a_default_host_breaks_the_first_run_tie():
+    config = parse_config(
+        {"version": 1, "hosts": {"cursor": {"default": True}, "opencode": {}}}
+    )
+    assert select_host(config, None).name == "cursor"
+
+
+def test_two_default_hosts_are_rejected():
+    with pytest.raises(ConfigError, match="more than one default host"):
+        parse_config(
+            {
+                "version": 1,
+                "hosts": {
+                    "cursor": {"default": True},
+                    "opencode": {"default": True},
+                },
+            }
+        )
+
+
+def test_memory_beats_the_default_host():
+    config = parse_config(
+        {"version": 1, "hosts": {"cursor": {"default": True}, "opencode": {}}}
+    )
+    assert select_host(config, None, "opencode").name == "opencode"
+
+
 def test_the_remembered_host_breaks_the_tie():
     config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
     assert select_host(config, None, "opencode").name == "opencode"
