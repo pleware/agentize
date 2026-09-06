@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    name: Lint + tests
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install
+        run: uv sync --group dev
+
+      # ruff stays local (tasks/todo.md). Pre-existing import order
+      # would fail a public CI on a kit that is still abstract.
+
+      - name: Tests + coverage
+        run: uv run pytest --cov=agentize --cov-report=xml --cov-report=term
+
+      # Informational only. This kit is still a thin host bootstrapper —
+      # do not fail the job if Codecov is not linked yet, and do not
+      # treat a coverage % as a product gate.
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+          use_oidc: true

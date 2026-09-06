@@ -1,0 +1,11 @@
+# Publish a number. Do not fail PRs on coverage — the kit is still abstract.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment: false
