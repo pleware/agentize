@@ -140,7 +140,10 @@ def plan_opencode(project_root: Path, config: Config, profile: str) -> Plan:
     target = project_root / opencode.CONFIG_FILE
 
     paths = opencode.instruction_paths(resolved, config.source)
-    content = opencode.render_config(_read_json(target), resolved, servers, config.source)
+    plugins = config.hosts["opencode"].plugins
+    content = opencode.render_config(
+        _read_json(target), resolved, servers, config.source, plugins
+    )
 
     prefix = config.hosts["opencode"].emit_prefix or skills.DEFAULT_PREFIX
     skill_writes, skill_deletes, skill_count = plan_host_skills(
@@ -157,6 +160,7 @@ def plan_opencode(project_root: Path, config: Config, profile: str) -> Plan:
             _count(len(paths), "instruction"),
             _count(skill_count, "skill"),
             _count(len(servers), "mcp server"),
+            _count(len(opencode.plugin_specs(plugins)), "plugin"),
         )
     )
     return Plan(

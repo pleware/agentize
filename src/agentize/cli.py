@@ -10,7 +10,8 @@ from pathlib import Path
 from . import __version__
 from .config import CONFIG_NAME, load_config
 from .errors import AgentizeError
-from .launch import executable, launch_env, prepare, select_host, spawn
+from .install import fetch_host
+from .launch import executable, global_executable, launch_env, prepare, select_host, spawn
 from .layout import config_is_ignored, config_path, ensure_data_dir
 from .mount import (
     Plan,
@@ -20,6 +21,8 @@ from .mount import (
     plan_cursor,
     plan_opencode,
 )
+from .session import LastRun, load_last, remember
+from .wrapper import write_wrappers
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -50,6 +53,22 @@ def build_parser() -> argparse.ArgumentParser:
     run = subcommands.add_parser("run", help="launch a host with the profile applied (default)")
     run.add_argument("--profile", metavar="NAME", help="profile to apply (default: from config)")
     run.add_argument("--host", metavar="NAME", help="host to launch (default: the enabled one)")
+    run.add_argument(
+        "--global",
+        dest="use_global",
+        action="store_true",
+        help="use the host on PATH instead of the project's isolated copy",
+    )
+    run.add_argument(
+        "extra",
+        nargs=argparse.REMAINDER,
+        help="arguments passed through to the host (put them after --)",
+    )
+
+    fetch = subcommands.add_parser("fetch", help="install hosts into .agentize/hosts/")
+    fetch.add_argument(
+        "--host", metavar="NAME", help="fetch one host (default: every enabled host)"
+    )
     return parser
 
 
@@ -58,6 +77,9 @@ def cmd_init(root: Path) -> int:
     config = config_path(root)
     print(f"agentize: policy {config}")
     print(f"agentize: data   {directory}")
+
+    for path in write_wrappers(root):
+        print(f"agentize: launcher {path.name}")
 
     if config_is_ignored(root):
         print(
@@ -104,17 +126,60 @@ def cmd_mount(root: Path, *, profile_name: str | None, check: bool) -> int:
     return 0
 
 
-def cmd_run(root: Path, *, profile_name: str | None, host_name: str | None) -> int:
-    config = load_config(config_path(root))
-    profile = config.select_profile(profile_name)
-    host = select_host(config, host_name)
+def cmd_run(
+    root: Path,
+    *,
+    profile_name: str | None,
+    host_name: str | None,
+    use_global: bool,
+    extra: list[str],
+) -> int:
+    last = load_last(root)
+    chosen_global = use_global if use_global or host_name is not None else last.use_global
 
-    prepare(root, profile, host)
-    env = launch_env(dict(os.environ), root, profile, host)
-    argv = [executable(host)]
+    policy = config_path(root)
+    if not policy.is_file():
+        return _run_without_policy(
+            root, host_name=host_name or last.host, extra=extra
+        )
 
-    print(f"agentize: {host} [{profile.name}]", file=sys.stderr)
+    config = load_config(policy)
+    profile = config.select_profile(profile_name or last.profile)
+    host = select_host(config, host_name, last.host)
+    use_global = chosen_global
+
+    remember(root, LastRun(host=host.name, profile=profile.name, use_global=use_global))
+    prepare(root, profile, host.name)
+    env = launch_env(dict(os.environ), root, profile, host.name)
+    argv = [executable(root, host, use_global=use_global), *extra]
+
+    source = "PATH" if use_global else "isolated"
+    print(f"agentize: {host.name} [{profile.name}] ({source})", file=sys.stderr)
     return spawn(root, argv, env)
+
+
+def _run_without_policy(root: Path, *, host_name: str | None, extra: list[str]) -> int:
+    if not host_name:
+        raise AgentizeError(
+            f"no {CONFIG_NAME} here and no last host to repeat. "
+            f"Pass --host or write {CONFIG_NAME}."
+        )
+    remember(root, LastRun(host=host_name, use_global=True))
+    argv = [global_executable(host_name), *extra]
+    print(f"agentize: {host_name} (PATH, no {CONFIG_NAME})", file=sys.stderr)
+    return spawn(root, argv, dict(os.environ))
+
+
+def cmd_fetch(root: Path, *, host_name: str | None) -> int:
+    config = load_config(config_path(root))
+    hosts = [select_host(config, host_name)] if host_name else list(config.enabled_hosts())
+    if not hosts:
+        print("agentize: no enabled host to fetch", file=sys.stderr)
+        return 1
+    for host in hosts:
+        binary = fetch_host(root, host)
+        print(f"agentize: fetched {host.name} {host.pin} → {binary}")
+    return 0
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -127,11 +192,18 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_init(root)
         if args.command == "mount":
             return cmd_mount(root, profile_name=args.profile, check=args.check)
+        if args.command == "fetch":
+            return cmd_fetch(root, host_name=args.host)
         if args.command in (None, "run"):
+            extra = list(getattr(args, "extra", []) or [])
+            if extra and extra[0] == "--":
+                extra = extra[1:]
             return cmd_run(
                 root,
                 profile_name=getattr(args, "profile", None),
                 host_name=getattr(args, "host", None),
+                use_global=bool(getattr(args, "use_global", False)),
+                extra=extra,
             )
     except AgentizeError as exc:
         print(f"agentize: {exc}", file=sys.stderr)

@@ -1,6 +1,6 @@
 """Start an agent host with a profile applied.
 
-Everything except `spawn` is a pure calculation over strings, so the argv and the
+Everything except `spawn` is a calculation over strings, so the argv and the
 environment can be asserted without starting anything.
 """
 
@@ -10,32 +10,32 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .config import Config, Profile
+from .config import Config, Host, Profile
 from .errors import AgentizeError
 from .gitenv import git_env
-from .layout import data_dir, ensure_data_dir
+from .install import isolated_binary, path_name
+from .layout import ensure_data_dir, host_data_dir
 
-EXECUTABLES = {"opencode": "opencode", "cursor": "cursor"}
 
-
-def select_host(config: Config, requested: str | None) -> str:
-    enabled = [host.name for host in config.enabled_hosts()]
+def select_host(
+    config: Config, requested: str | None, remembered: str | None = None
+) -> Host:
+    enabled = list(config.enabled_hosts())
+    names = [host.name for host in enabled]
     if requested is not None:
-        if requested not in enabled:
-            known = ", ".join(sorted(enabled)) or "none"
+        if requested not in names:
+            known = ", ".join(sorted(names)) or "none"
             raise AgentizeError(f"host {requested!r} is not enabled (enabled: {known})")
-        return requested
+        return config.hosts[requested]
+    if remembered is not None and remembered in names:
+        return config.hosts[remembered]
     if len(enabled) == 1:
         return enabled[0]
     if not enabled:
         raise AgentizeError("no host is enabled in the configuration")
     raise AgentizeError(
-        f"more than one host is enabled; name one with --host: {', '.join(enabled)}"
+        f"more than one host is enabled; name one with --host: {', '.join(names)}"
     )
-
-
-def host_data_dir(project_root: Path, host: str) -> Path:
-    return data_dir(project_root) / host
 
 
 def isolation_env(project_root: Path, host: str) -> dict[str, str]:
@@ -61,12 +61,20 @@ def launch_env(
     return env
 
 
-def executable(host: str) -> str:
-    name = EXECUTABLES.get(host, host)
+def global_executable(host: str) -> str:
+    name = path_name(host)
     found = shutil.which(name)
+    if found is None and host == "cursor":
+        found = shutil.which("cursor-agent")
     if found is None:
         raise AgentizeError(f"{name} is not on PATH; agentize does not install hosts")
     return found
+
+
+def executable(project_root: Path, host: Host, *, use_global: bool) -> str:
+    if use_global:
+        return global_executable(host.name)
+    return str(isolated_binary(project_root, host))
 
 
 def prepare(project_root: Path, profile: Profile, host: str) -> None:

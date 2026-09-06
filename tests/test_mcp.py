@@ -205,6 +205,32 @@ def test_empty_profile_renders_an_empty_server_map():
     assert rendered == {"mcpServers": {}}
 
 
+def test_omo_alias_becomes_the_npm_name():
+    assert opencode.plugin_specs(["omo", "oh-my-openagent", "other"]) == [
+        "oh-my-openagent",
+        "other",
+    ]
+
+
+def test_mount_writes_the_plugin_list(tmp_path: Path):
+    write(
+        tmp_path / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n"
+        "  opencode:\n"
+        "    plugins: [omo]\n"
+        "profiles:\n"
+        "  human:\n"
+        "    default: true\n",
+    )
+    write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
+
+    assert main(["-C", str(tmp_path), "mount"]) == 0
+    data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
+    assert data["plugin"] == ["oh-my-openagent"]
+
+
 def test_opencode_entry_for_a_server_without_env():
     server = parse_config(
         {"version": 1, "mcp": {"servers": {"x": {"command": ["srv"]}}}}

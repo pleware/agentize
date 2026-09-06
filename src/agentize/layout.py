@@ -32,6 +32,36 @@ def data_dir(project_root: Path) -> Path:
     return project_root / DIR_NAME
 
 
+def host_root(project_root: Path, host: str) -> Path:
+    return data_dir(project_root) / "hosts" / host
+
+
+def host_version_dir(project_root: Path, host: str, pin: str) -> Path:
+    return host_root(project_root, host) / "versions" / pin
+
+
+def host_current_file(project_root: Path, host: str) -> Path:
+    return host_root(project_root, host) / "current"
+
+
+def host_data_dir(project_root: Path, host: str) -> Path:
+    return host_root(project_root, host) / "data"
+
+
+def read_current_pin(project_root: Path, host: str) -> str | None:
+    path = host_current_file(project_root, host)
+    if not path.is_file():
+        return None
+    pin = path.read_text(encoding="utf-8").strip()
+    return pin or None
+
+
+def write_current_pin(project_root: Path, host: str, pin: str) -> None:
+    path = host_current_file(project_root, host)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(f"{pin}\n", encoding="utf-8", newline="\n")
+
+
 def ensure_data_dir(project_root: Path) -> Path:
     """Create `.agentize/` and make it ignore itself. Never touches the root .gitignore."""
     directory = data_dir(project_root)

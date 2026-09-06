@@ -1,0 +1,17 @@
+#!/bin/sh
+set -eu
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+if [ -f "$here/pyproject.toml" ] && grep -q '^name = "agentize"' "$here/pyproject.toml"
+then
+  exec uv run --project "$here" agentize "$@"
+fi
+if ! command -v uv >/dev/null 2>&1
+then
+  echo "agentize: uv is not on PATH" >&2
+  exit 1
+fi
+if [ -n "${AGENTIZE_OFFLINE-}" ]
+then
+  exec uvx --offline --from git+https://github.com/pleware/agentize.git agentize "$@"
+fi
+exec uvx --refresh --from git+https://github.com/pleware/agentize.git agentize "$@"

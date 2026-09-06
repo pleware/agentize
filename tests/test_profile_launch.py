@@ -11,7 +11,8 @@ import pytest
 from agentize.config import ConfigError, parse_config
 from agentize.errors import AgentizeError
 from agentize.gitenv import git_env
-from agentize.launch import host_data_dir, isolation_env, launch_env, prepare, select_host
+from agentize.launch import isolation_env, launch_env, prepare, select_host
+from agentize.layout import host_data_dir
 
 CONFIG = parse_config(
     {
@@ -120,7 +121,7 @@ def test_the_identity_actually_reaches_git(tmp_path: Path):
 
 
 def test_the_only_enabled_host_needs_no_flag():
-    assert select_host(CONFIG, None) == "opencode"
+    assert select_host(CONFIG, None).name == "opencode"
 
 
 def test_a_disabled_host_cannot_be_launched():
@@ -132,6 +133,23 @@ def test_several_enabled_hosts_require_a_choice():
     config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
     with pytest.raises(AgentizeError, match="more than one host is enabled"):
         select_host(config, None)
+
+
+def test_the_remembered_host_breaks_the_tie():
+    config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
+    assert select_host(config, None, "opencode").name == "opencode"
+
+
+def test_a_flag_beats_the_remembered_host():
+    config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
+    assert select_host(config, "cursor", "opencode").name == "cursor"
+
+
+def test_a_stale_memory_is_ignored_if_that_host_is_off():
+    config = parse_config(
+        {"version": 1, "hosts": {"cursor": {}, "opencode": {"enabled": False}}}
+    )
+    assert select_host(config, None, "opencode").name == "cursor"
 
 
 def test_no_enabled_host_is_an_error():

@@ -26,7 +26,9 @@ def test_readme_example_parses_fully():
     assert config.source == Path(".agents")
     assert set(config.hosts) == {"cursor", "opencode", "claude", "codex"}
     assert config.hosts["cursor"].emit_prefix == "auto."
-    assert config.hosts["opencode"].addons == ("omo",)
+    assert config.hosts["cursor"].pin == "latest"
+    assert config.hosts["opencode"].plugins == ("oh-my-openagent",)
+    assert config.hosts["opencode"].pin == "latest"
     assert not config.hosts["claude"].enabled
     assert {host.name for host in config.enabled_hosts()} == {"cursor", "opencode"}
 
@@ -112,6 +114,11 @@ def test_unknown_git_key_is_rejected():
     raw = {"version": 1, "profiles": {"agent": {"git": {"username": "bot"}}}}
     with pytest.raises(ConfigError, match="git.username is not a known key"):
         parse_config(raw)
+
+
+def test_addons_is_rejected_in_favour_of_plugins():
+    with pytest.raises(ConfigError, match="renamed to 'plugins'"):
+        parse_config({"version": 1, "hosts": {"opencode": {"addons": ["omo"]}}})
 
 
 def test_wrong_types_are_reported_with_location():

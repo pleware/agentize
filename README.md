@@ -2,8 +2,43 @@
 
 One project config. Every agent host.
 
-> **Status: design.** Nothing is implemented yet. This README describes the
-> shape that was locked before writing code, so the scope stays honest.
+> **Status:** Cursor and OpenCode work. Claude Code and Codex are deferred.
+> `run` starts the project's isolated copy of a host, not whatever happens to
+> be on `PATH`. Both hosts track `latest` and update themselves after the
+> first `fetch`.
+
+## Install
+
+Run the matching one-liner in the project root. That is the whole install.
+
+If `uv` / `uvx` is missing, the script downloads the current GitHub release,
+checks the `.sha256` sidecar, and puts both binaries in `~/.local/bin`
+(and on your user PATH on Windows). Then it downloads the three launchers
+and checks those hashes against `scripts/checksums.txt`. A failed hash
+writes nothing.
+
+Linux:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.sh | sh
+```
+
+macOS:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install-macos.sh | sh
+```
+
+Windows (PowerShell):
+
+```powershell
+irm https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1 | iex
+```
+
+The files it writes (`agentize`, `agentize.ps1`, `agentize.cmd`) are
+trampolines, not the package. They call
+`uvx --refresh --from git+https://github.com/pleware/agentize.git`. Then add
+`agentize.yaml` and run `./agentize fetch`.
 
 ---
 
@@ -31,10 +66,39 @@ agentize adds the missing axis. You declare **who** (profile) and **where**
 (host) once, and it renders the native config each host expects.
 
 ```sh
-agentize                 # launch a host with a profile applied
-agentize mount           # render rules, skills and MCP config for each host
-agentize mount --check   # CI gate: fail if the rendered output is stale
+./agentize               # trampoline: uvx refreshes this tool, then runs it
+./agentize fetch         # first copy of each host into .agentize/hosts/
+./agentize run --global  # escape hatch: the host on PATH
+./agentize mount         # render rules, skills and MCP config for each host
+./agentize mount --check # CI gate: fail if the rendered output is stale
 ```
+
+`agentize init` plants three launchers (`agentize`, `agentize.ps1`,
+`agentize.cmd`) next to `agentize.yaml`. They are not the package. They call
+`uvx --refresh --from git+https://github.com/pleware/agentize.git`, so a week-old
+clone still starts today's build. `AGENTIZE_OFFLINE=1` skips the check and uses
+the cache. Inside this repository the same files call `uv run` instead, so
+development does not go through GitHub.
+
+A deny-by-default `.gitignore` needs the launchers whitelisted, same as the
+policy file:
+
+```gitignore
+!/agentize
+!/agentize.ps1
+!/agentize.cmd
+!/agentize.yaml
+```
+
+`cursor` here is the **agent CLI** (`agent` / `cursor-agent`), not the desktop
+editor. `run` never copies a shim from `PATH`. A missing copy is an error that
+names `agentize fetch`. After that first copy, leave the binary alone: Cursor
+Agent (`agent update`) and OpenCode refresh themselves in the same tree.
+
+The last host and profile are stored in `.agentize/last.yaml` (and a copy under
+`~/.agentize/`). That is why a bare `agentize` is enough the second time — and
+why it still works in a directory that has no `agentize.yaml` yet. The
+committed file is never rewritten on launch.
 
 ## Two axes
 
@@ -107,8 +171,11 @@ source: .agents
 hosts:
   cursor:
     emit_prefix: auto.
+    pin: latest                 # or omit; Cursor Agent updates itself
   opencode:
-    addons: [omo]
+    pin: latest                 # or omit; OpenCode updates itself
+    plugins:
+      - oh-my-openagent          # first; OpenCode installs it at startup
   claude: { enabled: false }
   codex:  { enabled: false }
 
@@ -157,10 +224,18 @@ Git identity is set as process environment. agentize never runs
 
 ```
 <project>/
-  agentize.yaml        policy — commit this
-  .agentize/           runtime data — ignores itself
-    local.yaml         per-clone override
-    opencode/          host data
+  agentize             launcher — commit this (uvx trampoline)
+  agentize.ps1
+  agentize.cmd
+  agentize.yaml        policy — commit this (pin: latest is the default shape)
+  .agentize/           machine state — ignores itself
+    last.yaml              last host and profile — not committed
+    hosts/
+      opencode/
+        versions/latest/     unpacked fetch; the host may overwrite
+        current              pointer (text, not a symlink)
+        data/                isolated OpenCode database
+      cursor/                same shape; the binary inside is the agent CLI
   .agents/             rules and project-owned skills — commit these
 ```
 
@@ -179,6 +254,30 @@ rule for it, and agentize never edits a `.gitignore` the project owns.
 `agentize init` refuses to continue when `agentize.yaml` sits behind an ignore
 rule, because a policy nobody can commit is worse than no policy at all.
 
+### Hosts and versions
+
+`pin: latest` (or omitting `pin`) is the default for Cursor Agent and OpenCode.
+Both programs update themselves. agentize installs them once into
+`.agentize/hosts/<name>/versions/latest/` and does not fight a later overwrite.
+
+`agentize fetch` is that first copy. If the `latest` tree already looks
+installed, fetch leaves it alone so a self-update is not replaced by an older
+archive. A numbered pin still skips when that exact version is already present.
+
+Cursor has no `/latest/` download URL. The first fetch reads today's build id
+from `https://cursor.com/install`, then unpacks that archive into `latest`.
+OpenCode uses GitHub's `releases/latest` redirect.
+
+A concrete pin (`pin: "1.18.4"` or `pin: "2026.09.02-c22c1a3"`) is the escape
+hatch: fetch that tag, and `run` refuses if the `current` pointer does not
+match.
+
+OpenCode plugins are a list on the host, not a profile. `mount` writes them
+into `opencode.json` as `plugin`. The first predefined entry is
+[Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent)
+(`oh-my-openagent`; `omo` is an alias). OpenCode installs the npm package
+itself at startup — agentize does not.
+
 YAML for the source because it nests and takes comments. The output formats
 are not a choice — each host dictates its own.
 
@@ -193,7 +292,7 @@ This is the short list on purpose. Most of this problem is already solved.
 | A rules format            | `AGENTS.md` is read by every host                |
 | An MCP server schema      | Each host defines one; agentize translates      |
 | Agent authorization       | The MCP spec is standardizing agent identity    |
-| Toolchain installation    | That is a workspace bootstrapper's job          |
+| The rest of the toolchain | A workspace bootstrapper's job. Host binaries are `agentize fetch` |
 | Git hook installation     | Same. agentize only exposes the profile hooks read |
 
 What is left is narrow: one source, four dialects, plus the profile axis for

@@ -34,7 +34,11 @@ class Host:
     name: str
     enabled: bool = True
     emit_prefix: str = ""
-    addons: tuple[str, ...] = ()
+    plugins: tuple[str, ...] = ()
+    """OpenCode plugin specs, in order. Ignored by hosts that have no plugin list."""
+    pin: str | None = None
+    """Host version. OpenCode and Cursor treat a missing pin or `latest` as
+    floating; both update themselves after the first fetch."""
 
 
 @dataclass(frozen=True)
@@ -159,11 +163,17 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         prefix = body.get("emit_prefix", "")
         if not isinstance(prefix, str):
             raise ConfigError(f"{where}.emit_prefix must be a string")
+        if "addons" in body and "plugins" not in body:
+            raise ConfigError(
+                f"{where}: 'addons' was renamed to 'plugins' "
+                "(OpenCode's own word for the list in opencode.json)"
+            )
         hosts[name] = Host(
             name=name,
             enabled=enabled,
             emit_prefix=prefix,
-            addons=_str_list(body.get("addons"), f"{where}.addons"),
+            plugins=_str_list(body.get("plugins"), f"{where}.plugins"),
+            pin=_optional_str(body.get("pin"), f"{where}.pin"),
         )
     return hosts
 
