@@ -175,6 +175,24 @@ def test_powershell_installer_tells_people_to_prefix_the_launcher():
     assert "./agentize fetch" not in text
 
 
+def test_windows_oneliner_is_one_cmd_line_for_powershell_and_prompt():
+    """cmd /c + curl.exe + -File works in both shells; iex (curl.exe) does not."""
+    readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+    header = "\n".join(
+        (SCRIPTS / "install.ps1").read_text(encoding="utf-8").splitlines()[:8]
+    )
+    needle = (
+        "cmd /c \"curl.exe -fsSL "
+        "https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1 "
+        "-o %TEMP%\\agentize-install.ps1 && powershell -NoProfile "
+        "-ExecutionPolicy Bypass -File %TEMP%\\agentize-install.ps1\""
+    )
+    assert needle in readme
+    assert needle in header
+    assert "iex (curl.exe" not in readme
+    assert "irm " not in readme
+
+
 def test_powershell_installer_runs_through_iex(tmp_path: Path):
     """`irm | iex` evaluates in the current scope, unlike `-File`."""
     dest = tmp_path / "project"
@@ -187,7 +205,7 @@ def test_powershell_installer_runs_through_iex(tmp_path: Path):
         "AGENTIZE_UV_SKIP_PATH_WRITE": "1",
     }
     command = (
-        f"Get-Content -Raw -LiteralPath '{SCRIPTS / 'install.ps1'}' | Invoke-Expression"
+        f"Invoke-Expression ((Get-Content -LiteralPath '{SCRIPTS / 'install.ps1'}') | Out-String)"
     )
     result = subprocess.run(
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", command],

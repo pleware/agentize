@@ -29,16 +29,21 @@ macOS:
 curl -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install-macos.sh | sh
 ```
 
-Windows (PowerShell):
+Windows (PowerShell or Command Prompt):
 
-```powershell
-iex (curl.exe -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1)
+```bat
+cmd /c "curl.exe -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1 -o %TEMP%\agentize-install.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File %TEMP%\agentize-install.ps1"
 ```
+
+One line on purpose: Command Prompt has no `iex`, and PowerShell turns
+`curl.exe` output into an array that `iex` will not accept. This downloads
+with `curl.exe` (so WinINET cannot serve a stale `irm` copy) and runs the
+script as a file. After that, `.\agentize fetch` works in both shells.
 
 The files it writes (`agentize`, `agentize.ps1`, `agentize.cmd`) are
 trampolines, not the package. They call
 `uvx --refresh --from git+https://github.com/pleware/agentize.git`. Then add
-`agentize.yaml` and run `./agentize fetch` (PowerShell: `.\agentize fetch`).
+`agentize.yaml` and run `./agentize fetch` (Windows: `.\agentize fetch`).
 
 ---
 
