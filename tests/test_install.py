@@ -70,6 +70,13 @@ def test_platform_mapping_is_explicit():
         host_os("freebsd")
 
 
+def test_cursor_windows_package_uses_a_cmd_launcher(tmp_path: Path):
+    dest = tmp_path / "out"
+    extract_archive(_zip_with_binary("cursor-agent.cmd", b"@echo off\n"), dest)
+    found = find_binary(dest, "cursor")
+    assert found.name == "cursor-agent.cmd"
+
+
 def test_extract_and_find_nested_binary(tmp_path: Path):
     dest = tmp_path / "out"
     extract_archive(_zip_with_binary("opencode"), dest)

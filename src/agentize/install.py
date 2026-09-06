@@ -33,7 +33,14 @@ GetBytes = Callable[[str], bytes]
 
 BINARY_NAMES = {
     "opencode": ("opencode.exe", "opencode"),
-    "cursor": ("cursor-agent.exe", "cursor-agent", "agent.exe", "agent"),
+    "cursor": (
+        "cursor-agent.exe",
+        "cursor-agent.cmd",
+        "cursor-agent",
+        "agent.exe",
+        "agent.cmd",
+        "agent",
+    ),
 }
 
 PATH_NAMES = {"opencode": "opencode", "cursor": "agent"}
