@@ -14,7 +14,7 @@ from .config import Config, Host, Profile
 from .errors import AgentizeError
 from .gitenv import git_env
 from .install import isolated_binary, path_name
-from .layout import ensure_data_dir, host_data_dir
+from .store_tree import ensure_data_dir, host_data_dir
 
 
 def select_host(

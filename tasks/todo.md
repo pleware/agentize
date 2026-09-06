@@ -61,8 +61,8 @@ file agentize has no business editing.
 **Files likely touched:**
 - `pyproject.toml`
 - `src/agentize/__init__.py`, `src/agentize/cli.py`, `src/agentize/config.py`
-- `src/agentize/layout.py`
-- `tests/test_config.py`, `tests/test_layout.py`
+- `src/agentize/store_tree.py`
+- `tests/test_config.py`, `tests/test_store_tree.py`
 
 **Estimated scope:** S
 

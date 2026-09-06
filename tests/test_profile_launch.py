@@ -12,7 +12,7 @@ from agentize.config import ConfigError, parse_config
 from agentize.errors import AgentizeError
 from agentize.gitenv import git_env
 from agentize.launch import isolation_env, launch_env, prepare, select_host
-from agentize.layout import host_data_dir
+from agentize.store_tree import host_data_dir
 
 CONFIG = parse_config(
     {

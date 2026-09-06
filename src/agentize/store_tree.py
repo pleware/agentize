@@ -1,4 +1,4 @@
-"""Where agentize keeps its files.
+"""The store tree: where agentize keeps its files.
 
 Policy lives in `agentize.yaml` at the project root, beside `mani.yaml` and
 `ignite.toml`. It is committed, and a repository whitelist can name it in one
@@ -6,6 +6,8 @@ line like any other root file.
 
 Runtime data lives in `.agentize/`, which ignores itself. Nothing in there
 belongs in git, so the project's own `.gitignore` needs no rule for it.
+
+This is not a workspace tree (ignite kinds) and not a toolchain plant.
 """
 
 from __future__ import annotations

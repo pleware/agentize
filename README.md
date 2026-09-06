@@ -226,7 +226,7 @@ outside the repository.
 Git identity is set as process environment. agentize never runs
 `git config --local`.
 
-### Layout
+### Store tree
 
 ```
 <project>/

@@ -8,4 +8,4 @@ class AgentizeError(Exception):
 
 
 class MountError(AgentizeError):
-    """The resolved content cannot be rendered into a host's native layout."""
+    """The resolved content cannot be rendered into a host's native files."""

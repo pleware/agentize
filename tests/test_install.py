@@ -22,7 +22,7 @@ from agentize.install import (
     tracks_latest,
 )
 from agentize.launch import executable
-from agentize.layout import host_version_dir, read_current_pin
+from agentize.store_tree import host_version_dir, read_current_pin
 from agentize.platform import host_arch, host_os
 
 
@@ -133,7 +133,7 @@ def test_a_stale_current_pin_is_an_error(tmp_path: Path):
     dest = host_version_dir(tmp_path, "opencode", "1.0.0")
     dest.mkdir(parents=True)
     (dest / "opencode").write_bytes(b"x")
-    from agentize.layout import write_current_pin
+    from agentize.store_tree import write_current_pin
 
     write_current_pin(tmp_path, "opencode", "1.0.0")
     with pytest.raises(AgentizeError, match="installed copy is '1.0.0'"):
@@ -193,7 +193,7 @@ def test_cursor_latest_does_not_care_that_the_binary_self_updated(tmp_path: Path
     dest = host_version_dir(tmp_path, "cursor", LATEST)
     dest.mkdir(parents=True)
     (dest / "cursor-agent").write_bytes(b"self-updated")
-    from agentize.layout import write_current_pin
+    from agentize.store_tree import write_current_pin
 
     write_current_pin(tmp_path, "cursor", "2026.01.01-deadbee")
     assert isolated_binary(tmp_path, host).read_bytes() == b"self-updated"
@@ -228,7 +228,7 @@ def test_opencode_latest_does_not_care_that_the_binary_self_updated(tmp_path: Pa
     dest = host_version_dir(tmp_path, "opencode", LATEST)
     dest.mkdir(parents=True)
     (dest / "opencode").write_bytes(b"self-updated")
-    from agentize.layout import write_current_pin
+    from agentize.store_tree import write_current_pin
 
     write_current_pin(tmp_path, "opencode", "1.99.0")
     assert isolated_binary(tmp_path, host).read_bytes() == b"self-updated"

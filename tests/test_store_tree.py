@@ -7,7 +7,7 @@ import pytest
 
 from agentize.cli import main
 from agentize.config import CONFIG_NAME
-from agentize.layout import GITIGNORE, config_is_ignored, config_path, data_dir, ensure_data_dir
+from agentize.store_tree import GITIGNORE, config_is_ignored, config_path, data_dir, ensure_data_dir
 
 
 def git(repo: Path, *args: str) -> str:

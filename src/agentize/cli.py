@@ -12,7 +12,7 @@ from .config import CONFIG_NAME, load_config
 from .errors import AgentizeError
 from .install import fetch_host
 from .launch import executable, global_executable, launch_env, prepare, select_host, spawn
-from .layout import config_is_ignored, config_path, ensure_data_dir
+from .store_tree import config_is_ignored, config_path, ensure_data_dir
 from .mount import (
     Plan,
     apply,

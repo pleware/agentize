@@ -21,7 +21,7 @@ DOWNLOAD_UA = "agentize (https://github.com/pleware/agentize)"
 
 from .config import Host
 from .errors import AgentizeError
-from .layout import (
+from .store_tree import (
     ensure_data_dir,
     host_version_dir,
     read_current_pin,

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import yaml
 
-from .layout import DIR_NAME, data_dir, ensure_data_dir
+from .store_tree import DIR_NAME, data_dir, ensure_data_dir
 
 LAST_NAME = "last.yaml"
 HOME_ENV = "AGENTIZE_HOME"
