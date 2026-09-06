@@ -78,13 +78,18 @@ agentize adds the missing axis. You declare **who** (profile) and **where**
 ```sh
 ./agentize               # trampoline: uvx refreshes this tool, then runs it
 ./agentize fetch              # first copy of each host into .agentize/hosts/
-./agentize run --agent php    # mount that slug, then start the host
+./agentize run --agent php    # plant ignite if needed, ensure tools, mount, start
 ./agentize run --global       # escape hatch: the host on PATH
 ./agentize mount --agent php  # render without starting
 ./agentize mount --check      # CI gate: fail if the rendered output is stale
 ./agentize cleanup       # remove .agentize/ and planted launchers
 ./agentize --cleanup --home  # also remove ~/.agentize/
 ```
+
+`run --agent` requires `ignite.toml` with `[kit] pin`. If this machine has
+no kit, agentize clones it under `~/.agentize/ignite/<pin>/` and runs
+`ensure.sh` with that slug's `needs`. PHP versions stay in `mise.toml`.
+A human `--profile` does not touch ignite.
 
 `agentize init` plants three launchers (`agentize`, `agentize.ps1`,
 `agentize.cmd`) next to `agentize.yaml`. They are not the package. They call

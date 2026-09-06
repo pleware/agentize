@@ -205,6 +205,7 @@ def test_run_mounts_before_spawn(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         "agentize.cli.executable", lambda root, host, use_global: f"/bin/{host.name}"
     )
+    monkeypatch.setattr("agentize.cli.ensure_toolchain", lambda *a, **k: {})
 
     assert main(["-C", str(tmp_path), "run", "--agent", "php"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))

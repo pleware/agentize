@@ -7,7 +7,8 @@ line like any other root file.
 Runtime data lives in `.agentize/`, which ignores itself. Nothing in there
 belongs in git, so the project's own `.gitignore` needs no rule for it.
 
-This is not a workspace tree (ignite kinds) and not a toolchain plant.
+This is not a workspace tree (ignite kinds). Language binaries stay in
+`.ignite/`; `run --agent` only clones the ignite kit and calls `ensure.sh`.
 """
 
 from __future__ import annotations

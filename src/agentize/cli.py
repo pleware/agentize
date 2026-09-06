@@ -11,6 +11,7 @@ from . import __version__
 from .cleanup import apply_cleanup, describe, plan_cleanup
 from .config import CONFIG_NAME, Profile, load_config
 from .errors import AgentizeError
+from .ignite import ensure_toolchain
 from .install import fetch_host
 from .launch import executable, global_executable, launch_env, prepare, select_host, spawn
 from .mount import (
@@ -258,6 +259,10 @@ def cmd_run(
     _mount_for_run(root, config, identity)
     prepare(root, identity, host.name)
     env = launch_env(dict(os.environ), root, identity, host.name)
+    if identity.origin == "agent":
+        tools = ", ".join(identity.needs) or "mise.toml"
+        print(f"agentize: ignite ensure ({tools})", file=sys.stderr)
+        env.update(ensure_toolchain(root, identity.needs, env))
     argv = [executable(root, host, use_global=use_global), *extra]
 
     source = "PATH" if use_global else "isolated"
