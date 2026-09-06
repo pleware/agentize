@@ -38,7 +38,7 @@ iex (curl.exe -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scri
 The files it writes (`agentize`, `agentize.ps1`, `agentize.cmd`) are
 trampolines, not the package. They call
 `uvx --refresh --from git+https://github.com/pleware/agentize.git`. Then add
-`agentize.yaml` and run `./agentize fetch`.
+`agentize.yaml` and run `./agentize fetch` (PowerShell: `.\agentize fetch`).
 
 ---
 

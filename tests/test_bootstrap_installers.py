@@ -169,6 +169,12 @@ def test_powershell_installer_does_not_touch_automatic_iswindows():
     assert "$isWindows" not in text
 
 
+def test_powershell_installer_tells_people_to_prefix_the_launcher():
+    text = (SCRIPTS / "install.ps1").read_text(encoding="utf-8")
+    assert ".\\agentize fetch" in text
+    assert "./agentize fetch" not in text
+
+
 def test_powershell_installer_runs_through_iex(tmp_path: Path):
     """`irm | iex` evaluates in the current scope, unlike `-File`."""
     dest = tmp_path / "project"

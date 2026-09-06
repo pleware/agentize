@@ -154,7 +154,13 @@ try {
     Copy-Item -LiteralPath (Join-Path $TempRoot $name) -Destination (Join-Path $Dest $name) -Force
   }
   Write-AgentizeLog "wrote launchers in $Dest"
-  Write-AgentizeLog "next: add agentize.yaml, then ./agentize fetch"
+  Write-AgentizeLog "PowerShell will not run agentize from here without a prefix"
+  $yaml = Join-Path $Dest "agentize.yaml"
+  if (Test-Path -LiteralPath $yaml) {
+    Write-AgentizeLog "next: .\agentize fetch"
+  } else {
+    Write-AgentizeLog "next: add agentize.yaml, then .\agentize fetch"
+  }
 } finally {
   Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $TempRoot
 }
