@@ -77,10 +77,13 @@ agentize adds the missing axis. You declare **who** (profile) and **where**
 
 ```sh
 ./agentize               # trampoline: uvx refreshes this tool, then runs it
-./agentize fetch         # first copy of each host into .agentize/hosts/
-./agentize run --global  # escape hatch: the host on PATH
-./agentize mount         # render rules, skills and MCP config for each host
-./agentize mount --check # CI gate: fail if the rendered output is stale
+./agentize fetch              # first copy of each host into .agentize/hosts/
+./agentize run --agent php    # mount that slug, then start the host
+./agentize run --global       # escape hatch: the host on PATH
+./agentize mount --agent php  # render without starting
+./agentize mount --check      # CI gate: fail if the rendered output is stale
+./agentize cleanup       # remove .agentize/ and planted launchers
+./agentize --cleanup --home  # also remove ~/.agentize/
 ```
 
 `agentize init` plants three launchers (`agentize`, `agentize.ps1`,
@@ -89,6 +92,12 @@ agentize adds the missing axis. You declare **who** (profile) and **where**
 clone still starts today's build. `AGENTIZE_OFFLINE=1` skips the check and uses
 the cache. Inside this repository the same files call `uv run` instead, so
 development does not go through GitHub.
+
+`agentize cleanup` (or `--cleanup`) is the inverse of `init`: it deletes
+`.agentize/` and any launcher whose bytes still match the planted trampoline.
+A hand-edited launcher stays. `agentize.yaml` stays. Files `mount` wrote
+(`.cursor/`, `opencode.json`, `AGENTS.md`) stay. `--home` also deletes
+`~/.agentize/` (`$AGENTIZE_HOME` if set). `--check` reports without deleting.
 
 A deny-by-default `.gitignore` needs the launchers whitelisted, same as the
 policy file:
@@ -130,10 +139,12 @@ Content composes in three layers. Later wins.
 
 ```
 shared  →  hosts/<host>  →  profiles/<profile>
+shared  →  hosts/<host>  →  agents/default  →  agents/<slug>
 ```
 
-Not a matrix. Two profiles and four hosts would be eight combinations, six of
-them empty.
+A **profile** is who is driving (a human, today). An **agent slug** is which
+bot (`php`, `go`, `docs`). `agents.default` is the shared bot base; a slug
+overrides only the keys it sets. Not a matrix of host × slug.
 
 ```
 .agents/
@@ -159,11 +170,11 @@ Each host receives its own copy, in a directory only that host reads:
 in common — so a skill intended for one host cannot be picked up by another, and
 there is nothing to clean up after the fact.
 
-A profile can narrow the set:
+A profile or agent slug can narrow the set:
 
 ```yaml
-profiles:
-  agent:
+agents:
+  default:
     skills: [review]     # omit the key to get every skill the layers resolve
 ```
 
@@ -198,14 +209,29 @@ profiles:
     mcp: [postgres, github, sentry]
     skills: [code-review, idea-refine]
 
-  agent:
-    git:                          # one bot, shared by the team → belongs here
+agents:
+  default:                        # every bot inherits this
+    git:
       user_name: acme-agent
       user_email: agent@example.com
       push_remote: bot
     isolate_data: true
     mcp: [postgres]               # no issue tracker, no deploy tooling
     skills: [code-review]
+    lsp: false
+  php:
+    lsp: [phpantom]
+  go:
+    lsp: [gopls]
+
+lsp:
+  servers:
+    phpantom:
+      command: [phpantom_lsp, --stdio]
+      extensions: [.php]
+    gopls:
+      command: [gopls]
+      extensions: [.go]
 
 mcp:
   servers:
@@ -240,7 +266,7 @@ Git identity is set as process environment. agentize never runs
   agentize.cmd
   agentize.yaml        policy — commit this (pin: latest is the default shape)
   .agentize/           machine state — ignores itself
-    last.yaml              last host and profile — not committed
+    last.yaml              last host, profile and agent slug — not committed
     hosts/
       opencode/
         versions/latest/     unpacked fetch; the host may overwrite
@@ -302,6 +328,7 @@ This is the short list on purpose. Most of this problem is already solved.
 | A skill registry          | `npx skills` and host marketplaces exist        |
 | A rules format            | `AGENTS.md` is read by every host                |
 | An MCP server schema      | Each host defines one; agentize translates      |
+| Language servers          | Pin Intelephense / PHPantom / gopls in the product `mise.toml`. agentize only names the command |
 | Agent authorization       | The MCP spec is standardizing agent identity    |
 | The rest of the toolchain | A workspace bootstrapper's job. Host binaries are `agentize fetch` |
 | Git hook installation     | Same. agentize only exposes the profile hooks read |

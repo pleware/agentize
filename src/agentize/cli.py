@@ -8,11 +8,11 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .config import CONFIG_NAME, load_config
+from .cleanup import apply_cleanup, describe, plan_cleanup
+from .config import CONFIG_NAME, Profile, load_config
 from .errors import AgentizeError
 from .install import fetch_host
 from .launch import executable, global_executable, launch_env, prepare, select_host, spawn
-from .store_tree import config_is_ignored, config_path, ensure_data_dir
 from .mount import (
     Plan,
     apply,
@@ -22,6 +22,7 @@ from .mount import (
     plan_opencode,
 )
 from .session import LastRun, load_last, remember
+from .store_tree import config_is_ignored, config_path, ensure_data_dir
 from .wrapper import write_wrappers
 
 
@@ -50,16 +51,49 @@ def build_parser() -> argparse.ArgumentParser:
         help="profile for run or mount (default: the remembered or default profile)",
     )
     parser.add_argument(
+        "--agent",
+        metavar="SLUG",
+        help="agent slug for run or mount (agents.default plus this overlay)",
+    )
+    parser.add_argument(
         "--global",
         dest="use_global",
         action="store_true",
         help="use the host on PATH instead of the project's isolated copy",
     )
+    parser.add_argument(
+        "--cleanup",
+        action="store_true",
+        help="remove .agentize/ and planted launchers (same as the cleanup command)",
+    )
+    parser.add_argument(
+        "--home",
+        dest="cleanup_home",
+        action="store_true",
+        help="with cleanup, also remove ~/.agentize/",
+    )
     subcommands = parser.add_subparsers(dest="command")
     subcommands.add_parser("init", help=f"report where {CONFIG_NAME} goes and prepare data")
 
+    cleanup = subcommands.add_parser(
+        "cleanup",
+        help="remove .agentize/ and planted launchers; leave agentize.yaml",
+    )
+    cleanup.add_argument(
+        "--check",
+        action="store_true",
+        help="report what would be removed and exit non-zero, without deleting",
+    )
+    cleanup.add_argument(
+        "--home",
+        dest="cleanup_home",
+        action="store_true",
+        help="also remove ~/.agentize/",
+    )
+
     mount = subcommands.add_parser("mount", help="render rules for each enabled host")
     mount.add_argument("--profile", metavar="NAME", help="profile to render (default: from config)")
+    mount.add_argument("--agent", metavar="SLUG", help="agent slug to render")
     mount.add_argument(
         "--check",
         action="store_true",
@@ -68,6 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     run = subcommands.add_parser("run", help="launch a host with the profile applied (default)")
     run.add_argument("--profile", metavar="NAME", help="profile to apply (default: from config)")
+    run.add_argument("--agent", metavar="SLUG", help="agent slug to apply")
     run.add_argument("--host", metavar="NAME", help="host to launch (default: the enabled one)")
     run.add_argument(
         "--global",
@@ -110,31 +145,68 @@ def cmd_init(root: Path) -> int:
     return 0
 
 
+def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
+    plan = plan_cleanup(root, home=home)
+    lines = describe(plan, root)
+    if not lines:
+        print("agentize: nothing to clean")
+        return 0
+    for line in lines:
+        print(f"agentize: {line}")
+    if check:
+        return 1
+    apply_cleanup(plan)
+    return 0
+
+
 PLAN_BUILDERS = {"cursor": plan_cursor, "opencode": plan_opencode}
 
 
-def mount_plans(root: Path, config, profile_name: str) -> list[Plan]:
-    plans = [plan_agents_md(root, config, profile_name)]
+def mount_plans(root: Path, config, identity: Profile) -> list[Plan]:
+    plans = [plan_agents_md(root, config, identity)]
     for host in config.enabled_hosts():
         builder = PLAN_BUILDERS.get(host.name)
         if builder is None:
             print(f"agentize: {host.name}: no renderer in this build, skipped", file=sys.stderr)
             continue
-        plans.append(builder(root, config, profile_name))
+        plans.append(builder(root, config, identity))
     return plans
 
 
-def cmd_mount(root: Path, *, profile_name: str | None, check: bool) -> int:
+def _select_identity(config, *, profile_name, agent_name, last: LastRun):
+    return config.select_driver(
+        profile_name,
+        agent_name,
+        last_profile=last.profile,
+        last_agent=last.agent,
+    )
+
+
+def _memory_for(identity: Profile) -> tuple[str | None, str | None]:
+    if identity.origin == "agent":
+        return None, identity.name
+    return identity.name, None
+
+
+def cmd_mount(
+    root: Path,
+    *,
+    profile_name: str | None,
+    agent_name: str | None,
+    check: bool,
+) -> int:
     config = load_config(config_path(root))
-    profile = config.select_profile(profile_name)
+    identity = _select_identity(
+        config, profile_name=profile_name, agent_name=agent_name, last=load_last(root)
+    )
     pending = 0
 
-    for plan in mount_plans(root, config, profile.name):
+    for plan in mount_plans(root, config, identity):
         lines = changes(root, plan) if check else apply(root, plan)
         for line in lines:
             print(f"  {line}")
         pending += len(lines) if check else 0
-        print(f"agentize: [{profile.name}] {plan.label}")
+        print(f"agentize: [{identity.name}] {plan.label}")
 
     if check and pending:
         print(f"agentize: {pending} file(s) out of date — run: agentize mount", file=sys.stderr)
@@ -142,10 +214,17 @@ def cmd_mount(root: Path, *, profile_name: str | None, check: bool) -> int:
     return 0
 
 
+def _mount_for_run(root: Path, config, identity: Profile) -> None:
+    for plan in mount_plans(root, config, identity):
+        for line in apply(root, plan):
+            print(f"  {line}", file=sys.stderr)
+
+
 def cmd_run(
     root: Path,
     *,
     profile_name: str | None,
+    agent_name: str | None,
     host_name: str | None,
     use_global: bool,
     extra: list[str],
@@ -160,17 +239,29 @@ def cmd_run(
         )
 
     config = load_config(policy)
-    profile = config.select_profile(profile_name or last.profile)
+    identity = _select_identity(
+        config, profile_name=profile_name, agent_name=agent_name, last=last
+    )
     host = select_host(config, host_name, last.host)
     use_global = chosen_global
+    profile_mem, agent_mem = _memory_for(identity)
 
-    remember(root, LastRun(host=host.name, profile=profile.name, use_global=use_global))
-    prepare(root, profile, host.name)
-    env = launch_env(dict(os.environ), root, profile, host.name)
+    remember(
+        root,
+        LastRun(
+            host=host.name,
+            profile=profile_mem,
+            agent=agent_mem,
+            use_global=use_global,
+        ),
+    )
+    _mount_for_run(root, config, identity)
+    prepare(root, identity, host.name)
+    env = launch_env(dict(os.environ), root, identity, host.name)
     argv = [executable(root, host, use_global=use_global), *extra]
 
     source = "PATH" if use_global else "isolated"
-    print(f"agentize: {host.name} [{profile.name}] ({source})", file=sys.stderr)
+    print(f"agentize: {host.name} [{identity.name}] ({source})", file=sys.stderr)
     return spawn(root, argv, env)
 
 
@@ -204,10 +295,21 @@ def main(argv: list[str] | None = None) -> int:
     root = (args.directory or Path.cwd()).resolve()
 
     try:
+        if args.cleanup or args.command == "cleanup":
+            return cmd_cleanup(
+                root,
+                check=bool(getattr(args, "check", False)),
+                home=bool(getattr(args, "cleanup_home", False)),
+            )
         if args.command == "init":
             return cmd_init(root)
         if args.command == "mount":
-            return cmd_mount(root, profile_name=args.profile, check=args.check)
+            return cmd_mount(
+                root,
+                profile_name=args.profile,
+                agent_name=getattr(args, "agent", None),
+                check=args.check,
+            )
         if args.command == "fetch":
             return cmd_fetch(root, host_name=args.host)
         if args.command in (None, "run"):
@@ -217,6 +319,7 @@ def main(argv: list[str] | None = None) -> int:
             return cmd_run(
                 root,
                 profile_name=getattr(args, "profile", None),
+                agent_name=getattr(args, "agent", None),
                 host_name=getattr(args, "host", None),
                 use_global=bool(getattr(args, "use_global", False)),
                 extra=extra,

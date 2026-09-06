@@ -35,14 +35,19 @@ def test_readme_example_parses_fully():
     assert {host.name for host in config.enabled_hosts()} == {"cursor", "opencode"}
 
     human = config.profiles["human"]
-    agent = config.profiles["agent"]
     assert config.default_profile is human
     assert human.git is None
-    assert agent.git is not None
-    assert agent.git.user_email == "agent@example.com"
-    assert agent.git.push_remote == "bot"
-    assert agent.isolate_data
-    assert agent.mcp == ("postgres",)
+    php = config.resolve_agent("php")
+    assert php.origin == "agent"
+    assert php.git is not None
+    assert php.git.user_email == "agent@example.com"
+    assert php.git.push_remote == "bot"
+    assert php.isolate_data
+    assert php.mcp == ("postgres",)
+    assert php.lsp.names == ("phpantom",)
+    go = config.resolve_agent("go")
+    assert go.lsp.names == ("gopls",)
+    assert config.lsp_servers["phpantom"].command == ("phpantom_lsp", "--stdio")
 
     assert config.servers["postgres"].command == ("postgres-mcp",)
     assert config.servers["postgres"].env["DATABASE_URL"] == "${env:DATABASE_URL}"

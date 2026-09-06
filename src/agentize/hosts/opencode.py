@@ -12,13 +12,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from ..config import McpServer
+from ..config import LspServer, McpServer
 from ..resolve import ResolvedFile
 
 CONFIG_FILE = "opencode.json"
 INSTRUCTIONS_KEY = "instructions"
 MCP_KEY = "mcp"
 PLUGIN_KEY = "plugin"
+LSP_KEY = "lsp"
+PERMISSION_KEY = "permission"
 RULE_SUFFIX = ".mdc"
 
 # Short names we accept in agentize.yaml. The value is what OpenCode puts on npm.
@@ -70,15 +72,39 @@ def mcp_entry(server: McpServer) -> dict[str, Any]:
     return entry
 
 
+def lsp_entry(server: LspServer) -> dict[str, Any]:
+    if server.disabled:
+        return {"disabled": True}
+    entry: dict[str, Any] = {"command": list(server.command)}
+    if server.extensions:
+        entry["extensions"] = list(server.extensions)
+    if server.env:
+        entry["env"] = dict(server.env)
+    if server.initialization:
+        entry["initialization"] = dict(server.initialization)
+    return entry
+
+
+def render_lsp(payload: bool | dict[str, LspServer]) -> bool | dict[str, Any]:
+    if isinstance(payload, bool):
+        return payload
+    return {name: lsp_entry(server) for name, server in payload.items()}
+
+
 def render_config(
     existing: dict[str, Any],
     resolved: Iterable[ResolvedFile],
     servers: Iterable[McpServer],
     source: Path,
     plugins: Iterable[str] = (),
+    lsp: bool | dict[str, LspServer] = False,
 ) -> str:
     data = dict(existing)
     data[INSTRUCTIONS_KEY] = instruction_paths(resolved, source)
     data[MCP_KEY] = {server.name: mcp_entry(server) for server in servers}
     data[PLUGIN_KEY] = plugin_specs(plugins)
+    data[LSP_KEY] = render_lsp(lsp)
+    permission = dict(data.get(PERMISSION_KEY) or {})
+    permission["lsp"] = "allow" if lsp else "deny"
+    data[PERMISSION_KEY] = permission
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"

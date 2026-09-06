@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from . import skills
-from .config import Config
+from .config import Config, Profile
 from .errors import MountError
 from .hosts import agents_md, cursor, opencode
 from .resolve import ResolvedFile, resolve
@@ -39,10 +39,10 @@ def list_files(root: Path) -> tuple[str, ...]:
 
 
 def resolved_for(
-    project_root: Path, config: Config, *, host: str | None, profile: str
+    project_root: Path, config: Config, *, host: str | None, identity: Profile
 ) -> tuple[ResolvedFile, ...]:
     listing = list_files(project_root / config.source)
-    return resolve(config, listing, host=host, profile=profile)
+    return resolve(config, listing, host=host, identity=identity)
 
 
 def plan_host_skills(
@@ -50,20 +50,20 @@ def plan_host_skills(
     config: Config,
     *,
     host: str,
-    profile: str,
+    identity: Profile,
     skills_dir: str,
     prefix: str,
 ) -> tuple[list[Write], list[Path], int]:
     """Copy each resolved skill directory whole, and drop what is no longer resolved."""
     source_root = project_root / config.source
     units = skills.skill_units(list_files(source_root))
-    resolved = resolve(config, units, host=host, profile=profile)
+    resolved = resolve(config, units, host=host, identity=identity)
 
-    selected = config.profiles[profile].skills
+    selected = identity.skills
     missing = skills.unknown_names(resolved, selected)
     if missing:
         raise MountError(
-            f"profile {profile!r} asks for skills no layer provides: {', '.join(missing)}"
+            f"profile {identity.name!r} asks for skills no layer provides: {', '.join(missing)}"
         )
 
     wanted = skills.plan_skills(resolved, prefix, selected)
@@ -91,8 +91,8 @@ def plan_host_skills(
     return writes, deletes, len(wanted)
 
 
-def plan_cursor(project_root: Path, config: Config, profile: str) -> Plan:
-    resolved = resolved_for(project_root, config, host="cursor", profile=profile)
+def plan_cursor(project_root: Path, config: Config, identity: Profile) -> Plan:
+    resolved = resolved_for(project_root, config, host="cursor", identity=identity)
     prefix = config.hosts["cursor"].emit_prefix or cursor.DEFAULT_PREFIX
     wanted = cursor.plan_rules(resolved, prefix)
 
@@ -100,7 +100,7 @@ def plan_cursor(project_root: Path, config: Config, profile: str) -> Plan:
     dst = project_root / cursor.RULES_DIR
     writes = [Write(dst / item.name, (source_root / item.source).read_bytes()) for item in wanted]
 
-    servers = config.servers_for(config.profiles[profile])
+    servers = config.servers_for(identity)
     mcp_target = project_root / cursor.MCP_FILE
     mcp = cursor.render_mcp(_read_json(mcp_target), servers)
     writes.append(Write(mcp_target, mcp.encode("utf-8")))
@@ -117,7 +117,7 @@ def plan_cursor(project_root: Path, config: Config, profile: str) -> Plan:
         project_root,
         config,
         host="cursor",
-        profile=profile,
+        identity=identity,
         skills_dir=cursor.SKILLS_DIR,
         prefix=prefix,
     )
@@ -134,15 +134,16 @@ def plan_cursor(project_root: Path, config: Config, profile: str) -> Plan:
     return Plan(label=f"cursor: {label}", writes=tuple(writes), deletes=tuple(deletes))
 
 
-def plan_opencode(project_root: Path, config: Config, profile: str) -> Plan:
-    resolved = resolved_for(project_root, config, host="opencode", profile=profile)
-    servers = config.servers_for(config.profiles[profile])
+def plan_opencode(project_root: Path, config: Config, identity: Profile) -> Plan:
+    resolved = resolved_for(project_root, config, host="opencode", identity=identity)
+    servers = config.servers_for(identity)
     target = project_root / opencode.CONFIG_FILE
 
     paths = opencode.instruction_paths(resolved, config.source)
     plugins = config.hosts["opencode"].plugins
+    lsp = config.lsp_payload(identity)
     content = opencode.render_config(
-        _read_json(target), resolved, servers, config.source, plugins
+        _read_json(target), resolved, servers, config.source, plugins, lsp
     )
 
     prefix = config.hosts["opencode"].emit_prefix or skills.DEFAULT_PREFIX
@@ -150,7 +151,7 @@ def plan_opencode(project_root: Path, config: Config, profile: str) -> Plan:
         project_root,
         config,
         host="opencode",
-        profile=profile,
+        identity=identity,
         skills_dir=opencode.SKILLS_DIR,
         prefix=prefix,
     )
@@ -161,6 +162,7 @@ def plan_opencode(project_root: Path, config: Config, profile: str) -> Plan:
             _count(skill_count, "skill"),
             _count(len(servers), "mcp server"),
             _count(len(opencode.plugin_specs(plugins)), "plugin"),
+            _lsp_label(lsp),
         )
     )
     return Plan(
@@ -170,8 +172,8 @@ def plan_opencode(project_root: Path, config: Config, profile: str) -> Plan:
     )
 
 
-def plan_agents_md(project_root: Path, config: Config, profile: str) -> Plan:
-    resolved = resolved_for(project_root, config, host=None, profile=profile)
+def plan_agents_md(project_root: Path, config: Config, identity: Profile) -> Plan:
+    resolved = resolved_for(project_root, config, host=None, identity=identity)
     target = project_root / agents_md.FILE
     existing = target.read_text(encoding="utf-8") if target.is_file() else ""
     content = agents_md.merge(existing, agents_md.render_block(resolved, config.source))
@@ -183,6 +185,14 @@ def plan_agents_md(project_root: Path, config: Config, profile: str) -> Plan:
 
 def _count(number: int, noun: str) -> str:
     return f"{number} {noun}" if number == 1 else f"{number} {noun}s"
+
+
+def _lsp_label(lsp: bool | dict) -> str:
+    if lsp is True:
+        return "lsp all"
+    if not lsp:
+        return "lsp off"
+    return _count(len(lsp), "lsp server")
 
 
 def changes(project_root: Path, plan: Plan) -> tuple[str, ...]:

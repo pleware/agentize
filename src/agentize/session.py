@@ -26,6 +26,7 @@ HOME_ENV = "AGENTIZE_HOME"
 class LastRun:
     host: str | None = None
     profile: str | None = None
+    agent: str | None = None
     use_global: bool = False
 
 
@@ -43,12 +44,19 @@ def user_last_path() -> Path:
 
 
 def load_last(project_root: Path) -> LastRun:
-    """Project file wins field-by-field; the user file fills the gaps."""
+    """Project file wins field-by-field; the user file fills the gaps.
+
+    Profile and agent are one choice. If this project has a last.yaml, its
+    identity is used as written — a leftover `--profile` in `~/.agentize`
+    must not leak onto a machine that last ran `--agent php`.
+    """
     user = _read(user_last_path())
     project = _read(last_path(project_root))
+    project_file = last_path(project_root).is_file()
     return LastRun(
         host=project.host or user.host,
-        profile=project.profile or user.profile,
+        profile=project.profile if project_file else (project.profile or user.profile),
+        agent=project.agent if project_file else (project.agent or user.agent),
         use_global=project.use_global if project.host else user.use_global,
     )
 
@@ -72,9 +80,11 @@ def _read(path: Path) -> LastRun:
         return LastRun()
     host = raw.get("host")
     profile = raw.get("profile")
+    agent = raw.get("agent")
     return LastRun(
         host=host if isinstance(host, str) and host else None,
         profile=profile if isinstance(profile, str) and profile else None,
+        agent=agent if isinstance(agent, str) and agent else None,
         use_global=bool(raw.get("use_global", False)),
     )
 
@@ -83,6 +93,7 @@ def _write(path: Path, last: LastRun) -> None:
     body = {
         "host": last.host,
         "profile": last.profile,
+        "agent": last.agent,
         "use_global": last.use_global,
     }
     path.write_text(
