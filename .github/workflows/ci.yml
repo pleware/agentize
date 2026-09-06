@@ -26,12 +26,11 @@ jobs:
       - name: Tests + coverage
         run: uv run pytest --cov=agentize --cov-report=xml --cov-report=term
 
-      # Informational only. This kit is still a thin host bootstrapper —
-      # do not fail the job if Codecov is not linked yet, and do not
-      # treat a coverage % as a product gate.
+      # Coverage % stays informational in codecov.yml. A failed upload
+      # still fails the job — same as initagent / OES.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:
           files: coverage.xml
-          fail_ci_if_error: false
+          fail_ci_if_error: true
           use_oidc: true
