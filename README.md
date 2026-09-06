@@ -144,7 +144,9 @@ shared  →  hosts/<host>  →  agents/default  →  agents/<slug>
 
 A **profile** is who is driving (a human, today). An **agent slug** is which
 bot (`php`, `go`, `docs`). `agents.default` is the shared bot base; a slug
-overrides only the keys it sets. Not a matrix of host × slug.
+overrides only the keys it sets. `needs` is the mise tool list for that
+slug (`php@7.4` during a migration). Versions stay in `mise.toml`. Not a
+matrix of host × slug.
 
 ```
 .agents/
@@ -219,10 +221,15 @@ agents:
     mcp: [postgres]               # no issue tracker, no deploy tooling
     skills: [code-review]
     lsp: false
+    needs: [php@8.3]
   php:
     lsp: [phpantom]
+    needs: [php@8.3, phpantom]
+  php74:
+    needs: [php@7.4]
   go:
     lsp: [gopls]
+    needs: [go]
 
 lsp:
   servers:
@@ -328,9 +335,9 @@ This is the short list on purpose. Most of this problem is already solved.
 | A skill registry          | `npx skills` and host marketplaces exist        |
 | A rules format            | `AGENTS.md` is read by every host                |
 | An MCP server schema      | Each host defines one; agentize translates      |
-| Language servers          | Pin Intelephense / PHPantom / gopls in the product `mise.toml`. agentize only names the command |
+| Language servers          | Pin Intelephense / PHPantom / gopls in the product `mise.toml`. agentize names the command |
 | Agent authorization       | The MCP spec is standardizing agent identity    |
-| The rest of the toolchain | A workspace bootstrapper's job. Host binaries are `agentize fetch` |
+| Toolchain versions        | `mise.toml` + ignite. `needs` on a slug is the mise tool list; versions stay in mise |
 | Git hook installation     | Same. agentize only exposes the profile hooks read |
 
 What is left is narrow: one source, four dialects, plus the profile axis for

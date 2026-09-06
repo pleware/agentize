@@ -45,8 +45,11 @@ def test_readme_example_parses_fully():
     assert php.isolate_data
     assert php.mcp == ("postgres",)
     assert php.lsp.names == ("phpantom",)
+    assert php.needs == ("php@8.3", "phpantom")
     go = config.resolve_agent("go")
     assert go.lsp.names == ("gopls",)
+    assert go.needs == ("go",)
+    assert config.resolve_agent("php74").needs == ("php@7.4",)
     assert config.lsp_servers["phpantom"].command == ("phpantom_lsp", "--stdio")
 
     assert config.servers["postgres"].command == ("postgres-mcp",)

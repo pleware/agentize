@@ -21,7 +21,7 @@ AGENTS = {
             "mcp": ["postgres"],
             "lsp": False,
         },
-        "php": {"lsp": ["phpantom"]},
+        "php": {"lsp": ["phpantom"], "needs": ["php@8.3", "phpantom"]},
         "go": {"lsp": ["gopls"], "git": {"user_email": "go-agent@example.com"}},
     },
     "mcp": {"servers": {"postgres": {"command": ["postgres-mcp"]}}},
@@ -55,6 +55,29 @@ def test_build_and_plan_slugs_are_reserved():
         parse_config(raw)
 
 
+def test_needs_must_look_like_mise_tools():
+    raw = {
+        "version": 1,
+        "agents": {"default": {"needs": ["../php"]}},
+    }
+    with pytest.raises(ConfigError, match="not a mise tool name"):
+        parse_config(raw)
+
+
+def test_slug_overrides_needs():
+    config = parse_config(
+        {
+            "version": 1,
+            "agents": {
+                "default": {"needs": ["php@8.3"]},
+                "php74": {"needs": ["php@7.4"]},
+            },
+        }
+    )
+    assert config.resolve_agent("default").needs == ("php@8.3",)
+    assert config.resolve_agent("php74").needs == ("php@7.4",)
+
+
 def test_unknown_lsp_name_is_rejected():
     raw = {
         "version": 1,
@@ -82,6 +105,7 @@ def test_slug_inherits_then_overrides(tmp_path: Path):
     assert php.git.user_email == "agent@example.com"
     assert php.mcp == ("postgres",)
     assert php.lsp.names == ("phpantom",)
+    assert php.needs == ("php@8.3", "phpantom")
     assert php.origin == "agent"
 
     assert go.git is not None

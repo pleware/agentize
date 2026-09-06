@@ -18,6 +18,7 @@ RESERVED_AGENT_SLUGS = frozenset({"build", "plan"})
 
 REFERENCE = re.compile(r"\$\{[^}]+\}")
 SECRET_HINTS = ("token", "secret", "password", "passwd", "credential", "auth", "api_key", "apikey")
+NEED_TOOL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]*$")
 
 
 class ConfigError(AgentizeError):
@@ -69,6 +70,8 @@ class Profile:
     mcp: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
     lsp: LspChoice = field(default_factory=LspChoice)
+    needs: tuple[str, ...] = ()
+    """mise tool names (`php@7.4`) to install on `run`. Empty for a human."""
     origin: str = "profile"
     """`profile` reads `.agents/profiles/<name>/`. `agent` reads
     `.agents/agents/default/` then `.agents/agents/<name>/`."""
@@ -84,6 +87,7 @@ class AgentSpec:
     mcp: tuple[str, ...] = ()
     skills: tuple[str, ...] = ()
     lsp: LspChoice = field(default_factory=LspChoice)
+    needs: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -342,6 +346,9 @@ def _parse_agents(raw: Any, origin: str) -> dict[str, AgentSpec]:
             lsp=_parse_lsp_choice(body.get("lsp"), f"{where}.lsp")
             if "lsp" in body
             else LSP_OFF,
+            needs=_parse_needs(body.get("needs"), f"{where}.needs")
+            if "needs" in body
+            else (),
         )
     if DEFAULT_AGENT not in agents:
         raise ConfigError(f"{origin}: agents.default is required when agents are declared")
@@ -360,6 +367,17 @@ def _parse_git(raw: Any, where: str) -> GitIdentity | None:
         user_email=_optional_str(git_body.get("user_email"), f"{where}.user_email"),
         push_remote=_optional_str(git_body.get("push_remote"), f"{where}.push_remote"),
     )
+
+
+def _parse_needs(value: Any, where: str) -> tuple[str, ...]:
+    names = _str_list(value, where)
+    for name in names:
+        if not NEED_TOOL.match(name):
+            raise ConfigError(
+                f"{where}: {name!r} is not a mise tool name "
+                "(letters, digits, and . _ : @ + -)"
+            )
+    return names
 
 
 def _parse_lsp_choice(value: Any, where: str) -> LspChoice:
@@ -450,6 +468,7 @@ def _materialize_agent(base: AgentSpec, overlay: AgentSpec, name: str) -> Profil
     mcp = overlay.mcp if "mcp" in overlay.present else base.mcp
     skills = overlay.skills if "skills" in overlay.present else base.skills
     lsp = overlay.lsp if "lsp" in overlay.present else base.lsp
+    needs = overlay.needs if "needs" in overlay.present else base.needs
     return Profile(
         name=name,
         isolate_data=isolate,
@@ -457,6 +476,7 @@ def _materialize_agent(base: AgentSpec, overlay: AgentSpec, name: str) -> Profil
         mcp=mcp,
         skills=skills,
         lsp=lsp,
+        needs=needs,
         origin="agent",
     )
 
