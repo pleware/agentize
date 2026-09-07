@@ -15,6 +15,8 @@ SUPPORTED_VERSION = 1
 CONFIG_NAME = "agentize.yaml"
 DEFAULT_AGENT = "default"
 RESERVED_AGENT_SLUGS = frozenset({"build", "plan"})
+# Omitted `hosts.opencode.plugins` — TUI sidebar from npm. An empty list stays empty.
+OPENCODE_DEFAULT_PLUGINS = ("opencode-extended-sidebar",)
 
 REFERENCE = re.compile(r"\$\{[^}]+\}")
 SECRET_HINTS = ("token", "secret", "password", "passwd", "credential", "auth", "api_key", "apikey")
@@ -287,14 +289,20 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         if "addons" in body and "plugins" not in body:
             raise ConfigError(
                 f"{where}: 'addons' was renamed to 'plugins' "
-                "(OpenCode's own word for the list in opencode.json)"
+                "(OpenCode's own word for the list in opencode.json / tui.json)"
             )
+        if "plugins" in body:
+            plugins = _str_list(body.get("plugins"), f"{where}.plugins")
+        elif name == "opencode":
+            plugins = OPENCODE_DEFAULT_PLUGINS
+        else:
+            plugins = ()
         hosts[name] = Host(
             name=name,
             enabled=enabled,
             default=default,
             emit_prefix=prefix,
-            plugins=_str_list(body.get("plugins"), f"{where}.plugins"),
+            plugins=plugins,
             pin=_optional_str(body.get("pin"), f"{where}.pin"),
         )
     return hosts

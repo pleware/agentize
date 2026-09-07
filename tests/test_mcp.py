@@ -212,6 +212,14 @@ def test_omo_alias_becomes_the_npm_name():
     ]
 
 
+def test_oes_alias_becomes_the_npm_name():
+    assert opencode.plugin_specs(["oes", "opencode-extended-sidebar"]) == [
+        "opencode-extended-sidebar",
+    ]
+    assert opencode.tui_plugin_specs(["oes", "omo"]) == ["opencode-extended-sidebar"]
+    assert opencode.server_plugin_specs(["oes", "omo"]) == ["oh-my-openagent"]
+
+
 def test_mount_writes_the_plugin_list(tmp_path: Path):
     write(
         tmp_path / "agentize.yaml",
@@ -229,6 +237,49 @@ def test_mount_writes_the_plugin_list(tmp_path: Path):
     assert main(["-C", str(tmp_path), "mount"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert data["plugin"] == ["oh-my-openagent"]
+    assert not (tmp_path / "tui.json").exists()
+
+
+def test_mount_writes_the_sidebar_to_tui_json(tmp_path: Path):
+    write(
+        tmp_path / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n"
+        "  opencode: {}\n"
+        "profiles:\n"
+        "  human:\n"
+        "    default: true\n",
+    )
+    write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
+
+    assert main(["-C", str(tmp_path), "mount"]) == 0
+    data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
+    assert data["plugin"] == []
+    tui = json.loads((tmp_path / "tui.json").read_text(encoding="utf-8"))
+    assert tui["plugin"] == ["opencode-extended-sidebar"]
+    assert tui["$schema"] == "https://opencode.ai/tui.json"
+
+
+def test_mount_preserves_unrelated_tui_keys(tmp_path: Path):
+    write(
+        tmp_path / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n"
+        "  opencode:\n"
+        "    plugins: [oes]\n"
+        "profiles:\n"
+        "  human:\n"
+        "    default: true\n",
+    )
+    write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
+    write(tmp_path / "tui.json", json.dumps({"theme": "system", "plugin": []}))
+
+    assert main(["-C", str(tmp_path), "mount"]) == 0
+    tui = json.loads((tmp_path / "tui.json").read_text(encoding="utf-8"))
+    assert tui["theme"] == "system"
+    assert tui["plugin"] == ["opencode-extended-sidebar"]
 
 
 def test_opencode_entry_for_a_server_without_env():

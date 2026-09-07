@@ -156,6 +156,17 @@ def plan_opencode(project_root: Path, config: Config, identity: Profile) -> Plan
         prefix=prefix,
     )
 
+    writes = [Write(target, content.encode("utf-8")), *skill_writes]
+    tui_target = project_root / opencode.TUI_FILE
+    tui_plugins = opencode.tui_plugin_specs(plugins)
+    if tui_plugins or tui_target.is_file():
+        writes.append(
+            Write(
+                tui_target,
+                opencode.render_tui_config(_read_json(tui_target), plugins).encode("utf-8"),
+            )
+        )
+
     label = ", ".join(
         (
             _count(len(paths), "instruction"),
@@ -167,7 +178,7 @@ def plan_opencode(project_root: Path, config: Config, identity: Profile) -> Plan
     )
     return Plan(
         label=f"opencode: {label}",
-        writes=(Write(target, content.encode("utf-8")), *skill_writes),
+        writes=tuple(writes),
         deletes=tuple(skill_deletes),
     )
 

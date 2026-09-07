@@ -10,7 +10,8 @@ One project config. Every agent host.
 > **Status:** Cursor and OpenCode work. Claude Code and Codex are deferred.
 > `run` starts the project's isolated copy of a host, not whatever happens to
 > be on `PATH`. Both hosts track `latest` and update themselves after the
-> first `fetch`.
+> first `fetch`. `run --agent` also plants [ignite](https://github.com/pleware/ignite)
+> and installs that slug's `needs` from `mise.toml`.
 
 ## Install
 
@@ -22,37 +23,95 @@ checks the `.sha256` sidecar, and puts both binaries in `~/.local/bin`
 and checks those hashes against `scripts/checksums.txt`. A failed hash
 writes nothing.
 
-Linux:
+### Linux
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.sh | sh
 ```
 
-macOS:
+### macOS
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install-macos.sh | sh
 ```
 
-Windows (PowerShell or Command Prompt):
+### Windows
 
-```bat
+```cmd
 cmd /c "curl.exe -fsSL https://raw.githubusercontent.com/pleware/agentize/main/scripts/install.ps1 -o %TEMP%\agentize-install.ps1 && powershell -NoProfile -ExecutionPolicy Bypass -File %TEMP%\agentize-install.ps1"
 ```
 
-One line on purpose: Command Prompt has no `iex`, and PowerShell turns
-`curl.exe` output into an array that `iex` will not accept. This downloads
-with `curl.exe` (so WinINET cannot serve a stale `irm` copy) and runs the
-script as a file. After that, `.\agentize fetch` works in both shells.
+<small>
+Note: one line on purpose. Command Prompt has no <code>iex</code>, and
+PowerShell turns <code>curl.exe</code> output into an array that
+<code>iex</code> will not accept. This downloads with <code>curl.exe</code>
+(so WinINET cannot serve a stale <code>irm</code> copy) and runs the script
+as a file. After that, <code>.\agentize fetch</code> works in both shells.
+</small>
 
 The files it writes (`agentize`, `agentize.ps1`, `agentize.cmd`) are
 trampolines, not the package. They call
 `uvx --refresh --from git+https://github.com/pleware/agentize.git`. Then add
-`agentize.yaml` and run `./agentize fetch` (Windows: `.\agentize fetch`).
+`agentize.yaml` (and, for bots, `ignite.toml` + `mise.toml`) and run
+`./agentize fetch` (Windows: `.\agentize fetch`).
 
----
+## Commands
 
-## The problem
+```sh
+./agentize               # trampoline: uvx refreshes this tool, then runs it
+./agentize fetch              # first copy of each host into .agentize/hosts/
+./agentize run --agent php    # plant ignite if needed, ensure tools, mount, start
+./agentize run --global       # escape hatch: the host on PATH
+./agentize mount --agent php  # render without starting
+./agentize mount --check      # CI gate: fail if the rendered output is stale
+./agentize cleanup       # remove .agentize/ and planted launchers
+./agentize --cleanup --home  # also remove ~/.agentize/
+```
+
+See [Toolchain](#toolchain) for `ignite.toml`, `needs`, and where the kit lands.
+
+### Launchers
+
+`agentize init` plants three launchers (`agentize`, `agentize.ps1`,
+`agentize.cmd`) next to `agentize.yaml`. They are not the package. They call
+`uvx --refresh --from git+https://github.com/pleware/agentize.git`, so a week-old
+clone still starts today's build. `AGENTIZE_OFFLINE=1` skips the check and uses
+the cache. Inside this repository the same files call `uv run` instead, so
+development does not go through GitHub.
+
+### Cleanup
+
+`agentize cleanup` (or `--cleanup`) is the inverse of `init`: it deletes
+`.agentize/` and any launcher whose bytes still match the planted trampoline.
+A hand-edited launcher stays. `agentize.yaml` stays. Files `mount` wrote
+(`.cursor/`, `opencode.json`, `tui.json`, `AGENTS.md`) stay. `--home` also deletes
+`~/.agentize/` (`$AGENTIZE_HOME` if set). `--check` reports without deleting.
+
+### Gitignore
+
+A deny-by-default `.gitignore` needs the launchers whitelisted, same as the
+policy file:
+
+```gitignore
+!/agentize
+!/agentize.ps1
+!/agentize.cmd
+!/agentize.yaml
+```
+
+### Isolated hosts
+
+`cursor` here is the **agent CLI** (`agent` / `cursor-agent`), not the desktop
+editor. `run` never copies a shim from `PATH`. A missing copy is an error that
+names `agentize fetch`. After that first copy, leave the binary alone: Cursor
+Agent (`agent update`) and OpenCode refresh themselves in the same tree.
+
+The last host, profile and agent slug are stored in `.agentize/last.yaml`
+(and a copy under `~/.agentize/`). That is why a bare `agentize` is enough
+the second time — and why it still works in a directory that has no
+`agentize.yaml` yet. The committed file is never rewritten on launch.
+
+## Why
 
 You wire up an MCP server in Cursor. Then again in Claude Code. Then again in
 Codex, in TOML this time. The rules that explain how your repository works get
@@ -70,61 +129,12 @@ should not.
 Most setups cannot express *"the bot gets less than the human"* — the config
 has only one axis: which host.
 
-## What agentize does
+agentize adds the missing axis. You declare **who** (profile or agent slug)
+and **where** (host) once, and it renders the native config each host expects.
+On `run --agent` it also makes sure the machine has the toolchain that slug
+named — by calling ignite, not by downloading PHP itself.
 
-agentize adds the missing axis. You declare **who** (profile) and **where**
-(host) once, and it renders the native config each host expects.
-
-```sh
-./agentize               # trampoline: uvx refreshes this tool, then runs it
-./agentize fetch              # first copy of each host into .agentize/hosts/
-./agentize run --agent php    # plant ignite if needed, ensure tools, mount, start
-./agentize run --global       # escape hatch: the host on PATH
-./agentize mount --agent php  # render without starting
-./agentize mount --check      # CI gate: fail if the rendered output is stale
-./agentize cleanup       # remove .agentize/ and planted launchers
-./agentize --cleanup --home  # also remove ~/.agentize/
-```
-
-`run --agent` requires `ignite.toml` with `[kit] pin`. If this machine has
-no kit, agentize clones it under `~/.agentize/ignite/<pin>/` and runs
-`ensure.sh` with that slug's `needs`. PHP versions stay in `mise.toml`.
-A human `--profile` does not touch ignite.
-
-`agentize init` plants three launchers (`agentize`, `agentize.ps1`,
-`agentize.cmd`) next to `agentize.yaml`. They are not the package. They call
-`uvx --refresh --from git+https://github.com/pleware/agentize.git`, so a week-old
-clone still starts today's build. `AGENTIZE_OFFLINE=1` skips the check and uses
-the cache. Inside this repository the same files call `uv run` instead, so
-development does not go through GitHub.
-
-`agentize cleanup` (or `--cleanup`) is the inverse of `init`: it deletes
-`.agentize/` and any launcher whose bytes still match the planted trampoline.
-A hand-edited launcher stays. `agentize.yaml` stays. Files `mount` wrote
-(`.cursor/`, `opencode.json`, `AGENTS.md`) stay. `--home` also deletes
-`~/.agentize/` (`$AGENTIZE_HOME` if set). `--check` reports without deleting.
-
-A deny-by-default `.gitignore` needs the launchers whitelisted, same as the
-policy file:
-
-```gitignore
-!/agentize
-!/agentize.ps1
-!/agentize.cmd
-!/agentize.yaml
-```
-
-`cursor` here is the **agent CLI** (`agent` / `cursor-agent`), not the desktop
-editor. `run` never copies a shim from `PATH`. A missing copy is an error that
-names `agentize fetch`. After that first copy, leave the binary alone: Cursor
-Agent (`agent update`) and OpenCode refresh themselves in the same tree.
-
-The last host and profile are stored in `.agentize/last.yaml` (and a copy under
-`~/.agentize/`). That is why a bare `agentize` is enough the second time — and
-why it still works in a directory that has no `agentize.yaml` yet. The
-committed file is never rewritten on launch.
-
-## Two axes
+### Two axes
 
 |            | `cursor` | `opencode` | `claude` | `codex` |
 | ---------- | -------- | ---------- | -------- | ------- |
@@ -198,13 +208,14 @@ source: .agents
 
 hosts:
   cursor:
-    default: true               # bare `agentize` starts this until last.yaml remembers
     emit_prefix: auto.
     pin: latest                 # or omit; Cursor Agent updates itself
   opencode:
+    default: true               # bare `agentize` starts this until last.yaml remembers
     pin: latest                 # or omit; OpenCode updates itself
     plugins:
-      - oh-my-openagent          # first; OpenCode installs it at startup
+      - opencode-extended-sidebar  # TUI sidebar; omitted plugins default to this
+      - oh-my-openagent            # server plugin; OpenCode installs both at startup
   claude: { enabled: false }
   codex:  { enabled: false }
 
@@ -269,6 +280,9 @@ outside the repository.
 Git identity is set as process environment. agentize never runs
 `git config --local`.
 
+YAML for the source because it nests and takes comments. The output formats
+are not a choice — each host dictates its own.
+
 ### Store tree
 
 ```
@@ -286,6 +300,10 @@ Git identity is set as process environment. agentize never runs
         data/                isolated OpenCode database
       cursor/                same shape; the binary inside is the agent CLI
   .agents/             rules and project-owned skills — commit these
+
+~/.agentize/           # or $AGENTIZE_HOME — machine, not the project
+  last.yaml
+  ignite/<pin>/        planted ignite kit (`ensure.sh`); shared by checkouts
 ```
 
 Policy is one file at the project root, beside `mani.yaml` and `ignite.toml`.
@@ -321,16 +339,89 @@ A concrete pin (`pin: "1.18.4"` or `pin: "2026.09.02-c22c1a3"`) is the escape
 hatch: fetch that tag, and `run` refuses if the `current` pointer does not
 match.
 
-OpenCode plugins are a list on the host, not a profile. `mount` writes them
-into `opencode.json` as `plugin`. The first predefined entry is
-[Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent)
-(`oh-my-openagent`; `omo` is an alias). OpenCode installs the npm package
-itself at startup — agentize does not.
+### Plugins
 
-YAML for the source because it nests and takes comments. The output formats
-are not a choice — each host dictates its own.
+OpenCode plugins are a list on the host, not a profile. TUI packages
+(`opencode-extended-sidebar`; `oes` is an alias) go into `tui.json`. Server
+packages such as [Oh My OpenAgent](https://github.com/code-yeongyu/oh-my-openagent)
+(`oh-my-openagent`; `omo` is an alias) stay on `opencode.json` as `plugin`.
+Omitting `plugins` on OpenCode defaults to the sidebar. An empty list means
+none. OpenCode installs the npm packages itself at startup — agentize does not.
 
-## What agentize does not do
+## Toolchain
+
+A bot on a cold machine still has to compile PHP. agentize does not plant
+compilers. It requires [ignite](https://github.com/pleware/ignite) and asks
+ignite to install the mise tools the slug listed.
+
+Committed next to `agentize.yaml`:
+
+```toml
+# ignite.toml
+[kit]
+pin = "fee062f"   # a commit that has ensure.sh — not main on a fleet
+```
+
+```toml
+# mise.toml — versions live here, not in agentize.yaml
+[tools]
+"php@7.4" = "7.4.33"
+"php@8.3" = "8.3.6"
+```
+
+```yaml
+agents:
+  default:
+    needs: [php@8.3]
+  php:
+    needs: [php@8.3, phpantom]
+  php74:
+    needs: [php@7.4]
+```
+
+`run --agent php` then:
+
+1. Reads `[kit] pin` from `ignite.toml` (missing file or missing pin is an error).
+2. Clones that ref into `~/.agentize/ignite/<pin>/` if `ensure.sh` is not there.
+3. Runs `ensure.sh <project> php@8.3 phpantom` — mise only, no `mani.yaml` clones.
+4. Puts mise shims on `PATH`, mounts, starts the host.
+
+`--profile human` skips all of that. `mount` only renders files; it does not
+install tools. Two PHP versions in one checkout are two slugs and two pins
+in `mise.toml`.
+
+## Host support
+
+| | Cursor | Claude Code | Codex | OpenCode |
+| --- | --- | --- | --- | --- |
+| Project MCP file | `.cursor/mcp.json` | `.mcp.json` | `.codex/config.toml` | `opencode.json` |
+| TUI plugins | — | — | — | `tui.json` |
+| Format | JSON | JSON | TOML | JSON |
+| Disable one server | UI toggle only | `disabledMcpjsonServers` | `enabled = false` | rendered whole |
+| Tool allowlist | `.cursor/cli.json` | permission rules | `enabled_tools` | — |
+| Env interpolation | `${env:...}` | — | `env:VAR` | — |
+| Native profiles | no | no | **yes** | no |
+
+Codex already has profiles. agentize generalizes that model to the hosts that
+do not.
+
+### Cursor limitation
+
+Cursor merges `~/.cursor/mcp.json` with `.cursor/mcp.json`, and on a name
+collision the project entry wins. So a profile can **redefine** a server — point
+`postgres` at a scratch database instead of production — but it cannot
+**remove** one. Cursor documents disabling only as a toggle in the sidebar, with
+no committable file behind it.
+
+The practical answer is to keep the global file empty and let agentize render
+`.cursor/mcp.json` per project. Then each project gets exactly what its profile
+declares, and nothing else. Per-tool denies can go in `.cursor/cli.json`, which
+does live in the repository.
+
+Claude Code and Codex can subtract. OpenCode is rendered whole, so it is
+already exact.
+
+### Out of scope
 
 This is the short list on purpose. Most of this problem is already solved.
 
@@ -347,36 +438,6 @@ This is the short list on purpose. Most of this problem is already solved.
 
 What is left is narrow: one source, four dialects, plus the profile axis for
 the hosts that lack it.
-
-## Host support
-
-| | Cursor | Claude Code | Codex | OpenCode |
-| --- | --- | --- | --- | --- |
-| Project MCP file | `.cursor/mcp.json` | `.mcp.json` | `.codex/config.toml` | `opencode.json` |
-| Format | JSON | JSON | TOML | JSON |
-| Disable one server | UI toggle only | `disabledMcpjsonServers` | `enabled = false` | rendered whole |
-| Tool allowlist | `.cursor/cli.json` | permission rules | `enabled_tools` | — |
-| Env interpolation | `${env:...}` | — | `env:VAR` | — |
-| Native profiles | no | no | **yes** | no |
-
-Codex already has profiles. agentize generalizes that model to the hosts that
-do not.
-
-### A limitation worth knowing up front
-
-Cursor merges `~/.cursor/mcp.json` with `.cursor/mcp.json`, and on a name
-collision the project entry wins. So a profile can **redefine** a server — point
-`postgres` at a scratch database instead of production — but it cannot
-**remove** one. Cursor documents disabling only as a toggle in the sidebar, with
-no committable file behind it.
-
-The practical answer is to keep the global file empty and let agentize render
-`.cursor/mcp.json` per project. Then each project gets exactly what its profile
-declares, and nothing else. Per-tool denies can go in `.cursor/cli.json`, which
-does live in the repository.
-
-Claude Code and Codex can subtract. OpenCode is rendered whole, so it is
-already exact.
 
 ## Licence
 

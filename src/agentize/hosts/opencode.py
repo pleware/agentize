@@ -16,6 +16,8 @@ from ..config import LspServer, McpServer
 from ..resolve import ResolvedFile
 
 CONFIG_FILE = "opencode.json"
+TUI_FILE = "tui.json"
+TUI_SCHEMA = "https://opencode.ai/tui.json"
 INSTRUCTIONS_KEY = "instructions"
 MCP_KEY = "mcp"
 PLUGIN_KEY = "plugin"
@@ -27,7 +29,12 @@ RULE_SUFFIX = ".mdc"
 KNOWN_PLUGINS = {
     "oh-my-openagent": "oh-my-openagent",
     "omo": "oh-my-openagent",
+    "opencode-extended-sidebar": "opencode-extended-sidebar",
+    "oes": "opencode-extended-sidebar",
 }
+
+# TUI-only packages belong in tui.json. Everything else stays on opencode.json.
+TUI_PLUGINS = frozenset({"opencode-extended-sidebar"})
 
 SKILLS_DIR = ".opencode/skills"
 """Read by OpenCode and by nothing else. Cursor scans `.cursor`, `.agents`,
@@ -57,6 +64,14 @@ def plugin_specs(names: Iterable[str]) -> list[str]:
         seen.add(spec)
         out.append(spec)
     return out
+
+
+def tui_plugin_specs(names: Iterable[str]) -> list[str]:
+    return [spec for spec in plugin_specs(names) if spec in TUI_PLUGINS]
+
+
+def server_plugin_specs(names: Iterable[str]) -> list[str]:
+    return [spec for spec in plugin_specs(names) if spec not in TUI_PLUGINS]
 
 
 def mcp_entry(server: McpServer) -> dict[str, Any]:
@@ -102,9 +117,16 @@ def render_config(
     data = dict(existing)
     data[INSTRUCTIONS_KEY] = instruction_paths(resolved, source)
     data[MCP_KEY] = {server.name: mcp_entry(server) for server in servers}
-    data[PLUGIN_KEY] = plugin_specs(plugins)
+    data[PLUGIN_KEY] = server_plugin_specs(plugins)
     data[LSP_KEY] = render_lsp(lsp)
     permission = dict(data.get(PERMISSION_KEY) or {})
     permission["lsp"] = "allow" if lsp else "deny"
     data[PERMISSION_KEY] = permission
+    return json.dumps(data, indent=2, ensure_ascii=False) + "\n"
+
+
+def render_tui_config(existing: dict[str, Any], plugins: Iterable[str] = ()) -> str:
+    data = dict(existing)
+    data.setdefault("$schema", TUI_SCHEMA)
+    data[PLUGIN_KEY] = tui_plugin_specs(plugins)
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"

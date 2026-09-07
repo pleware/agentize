@@ -13,9 +13,10 @@ MassTrade migrates fully, that rendering has to go somewhere.
 
 Three shapes, none chosen:
 
-- **A host addon.** `hosts.opencode.plugins` now lists npm specs (starting with
-  `oh-my-openagent`) and mount writes them into `opencode.json`. That is the
-  plugin *entry*. Rendering `.omo/omo.jsonc` from a template is still open.
+- **A host addon.** `hosts.opencode.plugins` now lists npm specs (default
+  `opencode-extended-sidebar` in `tui.json`; `oh-my-openagent` stays a server
+  entry on `opencode.json`). That is the plugin *entry*. Rendering
+  `.omo/omo.jsonc` from a template is still open.
 - **A generic "render this template" hook.** agentize stays ignorant of OMO;
   the project declares a source and a destination.
 - **Stays in MassTrade.** A small script keeps rendering it, outside agentize.

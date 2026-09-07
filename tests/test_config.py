@@ -27,9 +27,13 @@ def test_readme_example_parses_fully():
     assert set(config.hosts) == {"cursor", "opencode", "claude", "codex"}
     assert config.hosts["cursor"].emit_prefix == "auto."
     assert config.hosts["cursor"].pin == "latest"
-    assert config.hosts["cursor"].default
-    assert config.default_host is config.hosts["cursor"]
-    assert config.hosts["opencode"].plugins == ("oh-my-openagent",)
+    assert not config.hosts["cursor"].default
+    assert config.hosts["opencode"].default
+    assert config.default_host is config.hosts["opencode"]
+    assert config.hosts["opencode"].plugins == (
+        "opencode-extended-sidebar",
+        "oh-my-openagent",
+    )
     assert config.hosts["opencode"].pin == "latest"
     assert not config.hosts["claude"].enabled
     assert {host.name for host in config.enabled_hosts()} == {"cursor", "opencode"}
@@ -129,6 +133,21 @@ def test_unknown_git_key_is_rejected():
 def test_addons_is_rejected_in_favour_of_plugins():
     with pytest.raises(ConfigError, match="renamed to 'plugins'"):
         parse_config({"version": 1, "hosts": {"opencode": {"addons": ["omo"]}}})
+
+
+def test_omitted_opencode_plugins_default_to_the_sidebar():
+    config = parse_config({"version": 1, "hosts": {"opencode": {}}})
+    assert config.hosts["opencode"].plugins == ("opencode-extended-sidebar",)
+
+
+def test_an_empty_opencode_plugin_list_stays_empty():
+    config = parse_config({"version": 1, "hosts": {"opencode": {"plugins": []}}})
+    assert config.hosts["opencode"].plugins == ()
+
+
+def test_cursor_does_not_inherit_the_opencode_plugin_default():
+    config = parse_config({"version": 1, "hosts": {"cursor": {}}})
+    assert config.hosts["cursor"].plugins == ()
 
 
 def test_wrong_types_are_reported_with_location():
