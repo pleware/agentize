@@ -91,38 +91,54 @@ def plan_host_skills(
     return writes, deletes, len(wanted)
 
 
-def plan_cursor(project_root: Path, config: Config, identity: Profile) -> Plan:
-    resolved = resolved_for(project_root, config, host="cursor", identity=identity)
-    prefix = config.hosts["cursor"].emit_prefix or cursor.DEFAULT_PREFIX
-    wanted = cursor.plan_rules(resolved, prefix)
+def plan_cursor(
+    project_root: Path,
+    config: Config,
+    identity: Profile,
+    *,
+    include: frozenset[str] | None = None,
+) -> Plan:
+    selected = include or frozenset({"rules", "skills", "mcp"})
+    writes: list[Write] = []
+    deletes: list[Path] = []
+    wanted: list = []
+    skill_count = 0
+    servers = config.servers_for(identity) if "mcp" in selected else ()
+    host = config.hosts.get("cursor")
+    prefix = (host.emit_prefix if host else "") or cursor.DEFAULT_PREFIX
 
-    source_root = project_root / config.source
-    dst = project_root / cursor.RULES_DIR
-    writes = [Write(dst / item.name, (source_root / item.source).read_bytes()) for item in wanted]
+    if "rules" in selected:
+        resolved = resolved_for(project_root, config, host="cursor", identity=identity)
+        wanted = list(cursor.plan_rules(resolved, prefix))
+        source_root = project_root / config.source
+        dst = project_root / cursor.RULES_DIR
+        writes.extend(
+            Write(dst / item.name, (source_root / item.source).read_bytes()) for item in wanted
+        )
+        existing = (
+            sorted(item.name for item in dst.glob(f"*{cursor.RULE_SUFFIX}") if item.is_file())
+            if dst.is_dir()
+            else []
+        )
+        stale = cursor.stale_names(existing, [item.name for item in wanted], prefix)
+        deletes.extend(dst / name for name in stale)
 
-    servers = config.servers_for(identity)
-    mcp_target = project_root / cursor.MCP_FILE
-    mcp = cursor.render_mcp(_read_json(mcp_target), servers)
-    writes.append(Write(mcp_target, mcp.encode("utf-8")))
+    if "mcp" in selected:
+        mcp_target = project_root / cursor.MCP_FILE
+        rendered = cursor.render_mcp(_read_json(mcp_target), servers)
+        writes.append(Write(mcp_target, rendered.encode("utf-8")))
 
-    existing = (
-        sorted(item.name for item in dst.glob(f"*{cursor.RULE_SUFFIX}") if item.is_file())
-        if dst.is_dir()
-        else []
-    )
-    stale = cursor.stale_names(existing, [item.name for item in wanted], prefix)
-    deletes = [dst / name for name in stale]
-
-    skill_writes, skill_deletes, skill_count = plan_host_skills(
-        project_root,
-        config,
-        host="cursor",
-        identity=identity,
-        skills_dir=cursor.SKILLS_DIR,
-        prefix=prefix,
-    )
-    writes.extend(skill_writes)
-    deletes.extend(skill_deletes)
+    if "skills" in selected:
+        skill_writes, skill_deletes, skill_count = plan_host_skills(
+            project_root,
+            config,
+            host="cursor",
+            identity=identity,
+            skills_dir=cursor.SKILLS_DIR,
+            prefix=prefix,
+        )
+        writes.extend(skill_writes)
+        deletes.extend(skill_deletes)
 
     label = ", ".join(
         (

@@ -54,6 +54,25 @@ Add `agentize.yaml` (and, for bots, `ignite.toml` + `mise.toml`) and run `./agen
 
 <small>See <a href="#toolchain">Toolchain</a> for <code>ignite.toml</code>, <code>needs</code>, and where the kit lands.</small>
 
+### Cascade
+
+`mount` at a directory that has `mani.yaml` always walks that registry and
+plants inherited Cursor MCP into every existing child (then each child's own
+`mani.yaml`). No `--cascade` flag.
+
+A child listed in `mani.yaml` does not need `agentize.yaml`. Membership plus
+an observed parent is enough. Child policy merges on top (child wins).
+`inherit: []` or `inherit: false` refuses. `inherit: [mcp]` keeps only that
+channel.
+
+Relative `--directory`, `-C`, and `--project` in server commands are rewritten
+to the child cwd (so `uv run --directory masstrade-mcp-developer/orchestrator`
+becomes `../masstrade-mcp-developer/orchestrator` inside `masstrade/`).
+
+Cascade writes only `.cursor/mcp.json` and `.agentize/parents.yaml`. It never
+plants `AGENTS.md`. Missing child paths are a skip. Scope is the `mani.yaml`
+you started in — MassTrade Atlassian does not leak into the binder.
+
 ### Launchers
 
 `agentize init` plants three launchers (`agentize`, `agentize.ps1`, `agentize.cmd`) next to `agentize.yaml`. They are not the package.

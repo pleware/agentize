@@ -150,6 +150,18 @@ def test_cursor_does_not_inherit_the_opencode_plugin_default():
     assert config.hosts["cursor"].plugins == ()
 
 
+def test_inherit_false_and_list_parse():
+    assert parse_config({"version": 1, "inherit": False}).inherit.refuse
+    listed = parse_config({"version": 1, "inherit": ["mcp"]})
+    assert listed.inherit.allows("mcp")
+    assert not listed.inherit.refuse
+
+
+def test_unknown_inherit_channel_is_rejected():
+    with pytest.raises(ConfigError, match="unknown channel 'plugins'"):
+        parse_config({"version": 1, "inherit": ["plugins"]})
+
+
 def test_wrong_types_are_reported_with_location():
     with pytest.raises(ConfigError, match="hosts.cursor.emit_prefix must be a string"):
         parse_config({"version": 1, "hosts": {"cursor": {"emit_prefix": 7}}})

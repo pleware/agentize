@@ -84,20 +84,11 @@ owns placement.
 
 ### Cascade down `mani.yaml` (MassTrade asked 2026-09-07)
 
-`mount` is one cwd. MassTrade wants: run at a workspace (or binder), walk
-`mani.yaml` children, overlay parent MCP/plugins, plant only what that
-ignite kind allows, and write an **observed** parent chain to each child's
-`.agentize/parents.yaml` (machine file). Committed `agentize.yaml` must not
-claim “I am nested” — the same product remote is also checked out alone.
-
-Do not invent a filesystem crawl. Do not plant `AGENTS.md` into kind
-`product`. Scope is the `mani.yaml` you started in (MassTrade Atlassian
-must not leak into the binder).
+**Implemented** as Task 16. `mount` always walks `mani.yaml`, inherit B
+(opt-out), rebases `--directory` / `-C` / `--project`, plants only
+`.cursor/mcp.json` plus `.agentize/parents.yaml`.
 
 Consumer draft: `masstrade-workspace/drafts/48.DRAFT.agentize-cascade.md`.
-**Decided:** `mount` always cascades (recursive `mani.yaml`). No `--cascade`
-flag. **B:** a child in `mani.yaml` with an observed parent inherits MCP
-without `agentize.yaml`; `inherit: []` is opt-out.
 
 ## Undecided design
 

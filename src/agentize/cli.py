@@ -8,8 +8,9 @@ import sys
 from pathlib import Path
 
 from . import __version__
+from .cascade import cascade, find_inherit_root, plant_child
 from .cleanup import apply_cleanup, describe, plan_cleanup
-from .config import CONFIG_NAME, Profile, load_config
+from .config import CONFIG_NAME, ConfigError, Profile, load_config
 from .errors import AgentizeError
 from .ignite import ensure_toolchain
 from .install import fetch_host
@@ -189,6 +190,29 @@ def _memory_for(identity: Profile) -> tuple[str | None, str | None]:
     return identity.name, None
 
 
+def _print_plan(root: Path, plan: Plan, *, check: bool, prefix: str = "") -> int:
+    lines = changes(root, plan) if check else apply(root, plan)
+    for line in lines:
+        print(f"  {line}")
+    print(f"agentize: {prefix}{plan.label}")
+    return len(lines) if check else 0
+
+
+def _emit_cascade(
+    rows: list,
+    *,
+    identity: Profile,
+    check: bool,
+) -> int:
+    pending = 0
+    for label, plan, lines in rows:
+        for line in lines:
+            print(f"  {line}")
+        pending += len(lines) if check else 0
+        print(f"agentize: cascade {label} [{identity.name}] {plan.label}")
+    return pending
+
+
 def cmd_mount(
     root: Path,
     *,
@@ -196,18 +220,35 @@ def cmd_mount(
     agent_name: str | None,
     check: bool,
 ) -> int:
-    config = load_config(config_path(root))
-    identity = _select_identity(
-        config, profile_name=profile_name, agent_name=agent_name, last=load_last(root)
-    )
+    policy = config_path(root)
     pending = 0
+    last = load_last(root)
 
-    for plan in mount_plans(root, config, identity):
-        lines = changes(root, plan) if check else apply(root, plan)
-        for line in lines:
-            print(f"  {line}")
-        pending += len(lines) if check else 0
-        print(f"agentize: [{identity.name}] {plan.label}")
+    if policy.is_file():
+        config = load_config(policy)
+        identity = _select_identity(
+            config, profile_name=profile_name, agent_name=agent_name, last=last
+        )
+        for plan in mount_plans(root, config, identity):
+            pending += _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
+        pending += _emit_cascade(
+            cascade(root, config, identity, check=check),
+            identity=identity,
+            check=check,
+        )
+    else:
+        parent = find_inherit_root(root)
+        if parent is None:
+            raise ConfigError(f"no configuration at {policy}")
+        config = load_config(config_path(parent))
+        identity = _select_identity(
+            config, profile_name=profile_name, agent_name=agent_name, last=last
+        )
+        pending += _emit_cascade(
+            plant_child(parent, root, config, identity, check=check),
+            identity=identity,
+            check=check,
+        )
 
     if check and pending:
         print(f"agentize: {pending} file(s) out of date — run: agentize mount", file=sys.stderr)
@@ -218,6 +259,9 @@ def cmd_mount(
 def _mount_for_run(root: Path, config, identity: Profile) -> None:
     for plan in mount_plans(root, config, identity):
         for line in apply(root, plan):
+            print(f"  {line}", file=sys.stderr)
+    for _label, _plan, lines in cascade(root, config, identity, check=False):
+        for line in lines:
             print(f"  {line}", file=sys.stderr)
 
 

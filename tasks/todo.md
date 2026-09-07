@@ -18,6 +18,7 @@ Plan and rationale: [`plan.md`](plan.md).
 | 10 Launch with isolated host data | done for resolution — isolated copy by default, `--global` for PATH; Windows TUI spawn still not ported |
 | 11 Project-owned skills | done |
 | 12–15 Adoption | not started |
+| 16 Cascade down `mani.yaml` | done |
 
 Task 10 has an open item in [`../backlog.md`](../backlog.md); fetching skills
 from a remote repository is recorded there as a separate feature.
@@ -462,6 +463,39 @@ The first consumer proves the extraction; the second proves it generalized.
 **Files likely touched:** `initagent-workspace` (separate remote, separate commit)
 
 **Estimated scope:** S
+
+---
+
+### Task 16: Cascade down `mani.yaml`
+
+**Description:** `mount` at a root that has `mani.yaml` always walks that
+registry and plants inherited Cursor MCP into every existing child. A child
+without `agentize.yaml` still inherits (opt-out is `inherit: []` /
+`inherit: false`). Relative `--directory` / `-C` / `--project` in server
+commands are rewritten to the child cwd. Observed parents go in
+`.agentize/parents.yaml`. Cascade never plants `AGENTS.md`.
+
+**Acceptance criteria:**
+- [x] `mount` always cascades; no `--cascade` flag
+- [x] Child listed in `mani.yaml` with an observed parent inherits MCP
+      without its own `agentize.yaml`
+- [x] `inherit: []` / `inherit: false` refuses MCP; `inherit: [mcp]` is a filter
+- [x] Relative directory flags rebase when planted in a child
+- [x] Writes only `.cursor/mcp.json` and `.agentize/parents.yaml`
+- [x] Missing child paths are a skip, not an error
+- [x] Scope is the `mani.yaml` you started in
+
+**Verification:**
+- [x] `uv run ruff check src/agentize/cascade.py src/agentize/cli.py src/agentize/config.py src/agentize/mani.py src/agentize/mount.py tests/test_cascade.py`
+- [x] `uv run pytest` (241 passed)
+
+**Dependencies:** Task 6
+
+**Files likely touched:** `src/agentize/cascade.py`, `src/agentize/mani.py`,
+`src/agentize/config.py`, `src/agentize/cli.py`, `src/agentize/mount.py`,
+`tests/test_cascade.py`
+
+**Estimated scope:** M
 
 ---
 

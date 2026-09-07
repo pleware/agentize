@@ -21,6 +21,7 @@ OPENCODE_DEFAULT_PLUGINS = ("opencode-extended-sidebar",)
 REFERENCE = re.compile(r"\$\{[^}]+\}")
 SECRET_HINTS = ("token", "secret", "password", "passwd", "credential", "auth", "api_key", "apikey")
 NEED_TOOL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]*$")
+INHERIT_CHANNELS = frozenset({"mcp"})
 
 
 class ConfigError(AgentizeError):
@@ -93,6 +94,30 @@ class AgentSpec:
 
 
 @dataclass(frozen=True)
+class InheritSpec:
+    """What a nested checkout takes from the observed parent.
+
+    Missing key → inherit every planted channel (today: MCP).
+    ``false`` or ``[]`` → refuse.
+    ``[mcp]`` → only those channels.
+    """
+
+    refuse: bool = False
+    channels: tuple[str, ...] | None = None
+
+    def allows(self, channel: str) -> bool:
+        if self.refuse:
+            return False
+        if self.channels is None:
+            return True
+        return channel in self.channels
+
+
+INHERIT_DEFAULT = InheritSpec()
+INHERIT_REFUSE = InheritSpec(refuse=True)
+
+
+@dataclass(frozen=True)
 class McpServer:
     name: str
     command: tuple[str, ...] = ()
@@ -126,6 +151,7 @@ class Config:
     lsp_servers: dict[str, LspServer] = field(default_factory=dict)
     skills_lock: Path | None = None
     worktree_dir: str | None = None
+    inherit: InheritSpec = field(default_factory=InheritSpec)
 
     @property
     def default_profile(self) -> Profile | None:
@@ -269,6 +295,7 @@ def parse_config(raw: Any, origin: str = "<config>") -> Config:
         lsp_servers=lsp_servers,
         skills_lock=Path(lock) if lock else None,
         worktree_dir=worktree_dir,
+        inherit=_parse_inherit(data.get("inherit"), origin),
     )
 
 
@@ -375,6 +402,23 @@ def _parse_git(raw: Any, where: str) -> GitIdentity | None:
         user_email=_optional_str(git_body.get("user_email"), f"{where}.user_email"),
         push_remote=_optional_str(git_body.get("push_remote"), f"{where}.push_remote"),
     )
+
+
+def _parse_inherit(value: Any, origin: str) -> InheritSpec:
+    if value is None:
+        return INHERIT_DEFAULT
+    if value is False:
+        return INHERIT_REFUSE
+    if isinstance(value, list):
+        names = _str_list(value, f"{origin}: inherit")
+        unknown = [name for name in names if name not in INHERIT_CHANNELS]
+        if unknown:
+            known = ", ".join(sorted(INHERIT_CHANNELS))
+            raise ConfigError(
+                f"{origin}: inherit names unknown channel {unknown[0]!r} (known: {known})"
+            )
+        return INHERIT_REFUSE if not names else InheritSpec(channels=names)
+    raise ConfigError(f"{origin}: inherit must be false or a list of channels")
 
 
 def _parse_needs(value: Any, where: str) -> tuple[str, ...]:
