@@ -13,7 +13,7 @@ from pathlib import Path
 
 import yaml
 
-from .config import CONFIG_NAME, Config, InheritSpec, Profile, load_config
+from .config import CONFIG_NAME, Config, InheritSpec, McpServer, Profile, load_config
 from .errors import AgentizeError
 from .ignite import IGNITE_TOML
 from .mani import child_dirs, lists_descendant, load_mani
@@ -59,9 +59,51 @@ def rebase_command(command: tuple[str, ...], from_root: Path, to_root: Path) -> 
     return tuple(out)
 
 
+def absolutize_relpath(value: str, from_root: Path) -> str:
+    path = Path(value)
+    if path.is_absolute():
+        return str(path)
+    return str((from_root / path).resolve())
+
+
+def absolutize_command(command: tuple[str, ...], from_root: Path) -> tuple[str, ...]:
+    out: list[str] = []
+    rebase_next = False
+    for arg in command:
+        if rebase_next:
+            out.append(absolutize_relpath(arg, from_root))
+            rebase_next = False
+            continue
+        if arg in DIRECTORY_FLAGS:
+            rebase_next = True
+        out.append(arg)
+    return tuple(out)
+
+
+def command_root(server: McpServer, fallback: Path) -> Path:
+    """Yaml directory that owns this server, else the cascade parent."""
+    return server.declared_at if server.declared_at is not None else fallback
+
+
+def absolutize_servers(config: Config, from_root: Path) -> Config:
+    servers = {
+        name: replace(
+            server,
+            command=absolutize_command(server.command, command_root(server, from_root)),
+        )
+        for name, server in config.servers.items()
+    }
+    return replace(config, servers=servers)
+
+
 def rebase_servers(config: Config, from_root: Path, to_root: Path) -> Config:
     servers = {
-        name: replace(server, command=rebase_command(server.command, from_root, to_root))
+        name: replace(
+            server,
+            command=rebase_command(
+                server.command, command_root(server, from_root), to_root
+            ),
+        )
         for name, server in config.servers.items()
     }
     return replace(config, servers=servers)
@@ -203,7 +245,9 @@ def plant_child(
     results: list[tuple[str, Plan, tuple[str, ...]]] = []
     spec = inherit_spec(child)
     label = posix_rel(child, parent_root)
-    if spec.allows("mcp"):
+    child_config = load_child_config(child)
+    identity = identity_for_child(parent_identity, child_config)
+    if spec.allows("mcp") and identity.mcp:
         mcp_plan = plan_inherited_mcp(parent_root, child, parent_config, parent_identity)
         results.append((label, mcp_plan, apply_or_check(child, mcp_plan, check=check)))
     ensure_data_dir(child)

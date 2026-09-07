@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
@@ -8,6 +9,7 @@ import yaml
 from agentize.cascade import (
     rebase_command,
     rebase_relpath,
+    rebase_servers,
 )
 from agentize.cli import main
 from agentize.config import parse_config
@@ -175,8 +177,62 @@ def test_recursive_mani_walk(tmp_path: Path):
 
     assert main(["-C", str(binder), "mount"]) == 0
     assert "orchestrator" in cursor_servers(erp)
+    assert cursor_servers(ws)["orchestrator"]["args"][2] == "family/orchestrator"
+    assert cursor_servers(erp)["orchestrator"]["args"][2] == "../family/orchestrator"
     chain = yaml.safe_load((erp / ".agentize" / "parents.yaml").read_text(encoding="utf-8"))
     assert [row["rel"] for row in chain["parents"]] == ["..", "../.."]
+
+
+def test_mixed_origins_keep_separate_directory_roots(tmp_path: Path):
+    """A binder-owned server and a child-owned server rebase from different roots."""
+    binder = tmp_path / "binder"
+    company = binder / "company"
+    erp = company / "erp"
+    erp.mkdir(parents=True)
+    base = parse_config(
+        {
+            "version": 1,
+            "mcp": {
+                "servers": {
+                    "shared": {
+                        "command": ["uv", "run", "--directory", "tools/shared", "s"]
+                    },
+                    "orch": {
+                        "command": ["uv", "run", "--directory", "family/orch", "o"]
+                    },
+                }
+            },
+        }
+    )
+    config = replace(
+        base,
+        servers={
+            "shared": replace(base.servers["shared"], declared_at=binder.resolve()),
+            "orch": replace(base.servers["orch"], declared_at=company.resolve()),
+        },
+    )
+    at_company = rebase_servers(config, binder, company)
+    assert at_company.servers["shared"].command[3] == "../tools/shared"
+    assert at_company.servers["orch"].command[3] == "family/orch"
+    at_erp = rebase_servers(config, company, erp)
+    assert at_erp.servers["shared"].command[3] == "../../tools/shared"
+    assert at_erp.servers["orch"].command[3] == "../family/orch"
+
+
+def test_empty_parent_does_not_plant_empty_mcp_on_bare_child(tmp_path: Path):
+    binder = tmp_path / "binder"
+    pware = binder / "pware"
+    pware.mkdir(parents=True)
+    write(
+        binder / "agentize.yaml",
+        "version: 1\nhosts:\n  cursor: {}\nprofiles:\n  human:\n    default: true\n    mcp: []\n",
+    )
+    write(binder / ".agents" / "shared" / "style.mdc", "x\n")
+    mani_projects(binder, pware="pware")
+
+    assert main(["-C", str(binder), "mount"]) == 0
+    assert not (pware / ".cursor" / "mcp.json").exists()
+    assert (pware / ".agentize" / "parents.yaml").is_file()
 
 
 def test_empty_inherit_list_refuses(tmp_path: Path):

@@ -25,6 +25,13 @@ from .mount import (
 )
 from .session import LastRun, load_last, remember
 from .store_tree import config_is_ignored, config_path, ensure_data_dir
+from .user_mcp import (
+    collect_user_mcp_servers,
+    cursor_user_mcp_enabled,
+    plan_user_mcp,
+    strip_user_mcp_prefix,
+    user_mcp_path,
+)
 from .wrapper import write_wrappers
 
 
@@ -149,7 +156,9 @@ def cmd_init(root: Path) -> int:
 
 def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
     plan = plan_cleanup(root, home=home)
-    lines = describe(plan, root)
+    lines = list(describe(plan, root))
+    if home:
+        lines.append("remove agentize-* from ~/.cursor/mcp.json")
     if not lines:
         print("agentize: nothing to clean")
         return 0
@@ -158,6 +167,8 @@ def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
     if check:
         return 1
     apply_cleanup(plan)
+    if home:
+        strip_user_mcp_prefix()
     return 0
 
 
@@ -236,6 +247,7 @@ def cmd_mount(
             identity=identity,
             check=check,
         )
+        pending += _emit_user_mcp(root, config, identity, check=check)
     else:
         parent = find_inherit_root(root)
         if parent is None:
@@ -249,11 +261,20 @@ def cmd_mount(
             identity=identity,
             check=check,
         )
+        pending += _emit_user_mcp(parent, config, identity, check=check)
 
     if check and pending:
         print(f"agentize: {pending} file(s) out of date — run: agentize mount", file=sys.stderr)
         return 1
     return 0
+
+
+def _emit_user_mcp(root: Path, config, identity: Profile, *, check: bool) -> int:
+    if not cursor_user_mcp_enabled(config):
+        return 0
+    wanted = collect_user_mcp_servers(root, config, identity)
+    plan = plan_user_mcp(wanted)
+    return _print_plan(user_mcp_path().parent.parent, plan, check=check, prefix="[human] ")
 
 
 def _mount_for_run(root: Path, config, identity: Profile) -> None:
@@ -262,6 +283,10 @@ def _mount_for_run(root: Path, config, identity: Profile) -> None:
             print(f"  {line}", file=sys.stderr)
     for _label, _plan, lines in cascade(root, config, identity, check=False):
         for line in lines:
+            print(f"  {line}", file=sys.stderr)
+    if cursor_user_mcp_enabled(config):
+        wanted = collect_user_mcp_servers(root, config, identity)
+        for line in apply(user_mcp_path().parent.parent, plan_user_mcp(wanted)):
             print(f"  {line}", file=sys.stderr)
 
 

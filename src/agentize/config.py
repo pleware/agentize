@@ -62,6 +62,9 @@ class Host:
     pin: str | None = None
     """Host version. OpenCode and Cursor treat a missing pin or `latest` as
     floating; both update themselves after the first fetch."""
+    user_mcp: bool = False
+    """Cursor only: also sync prefixed keys into ``~/.cursor/mcp.json``.
+    Default is on for ``cursor`` so Customize lists them in multi-root windows."""
 
 
 @dataclass(frozen=True)
@@ -124,6 +127,13 @@ class McpServer:
     env: dict[str, str] = field(default_factory=dict)
     url: str | None = None
     headers: dict[str, str] = field(default_factory=dict)
+    declared_at: Path | None = None
+    """Directory of the `agentize.yaml` that defined this server.
+
+    Relative `--directory` / `-C` / `--project` are resolved from here, not
+    from the `mount` cwd. A binder walk must not treat a child's command as
+    if it lived on the binder.
+    """
 
     @property
     def is_remote(self) -> bool:
@@ -246,10 +256,12 @@ def load_config(path: Path) -> Config:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except yaml.YAMLError as exc:
         raise ConfigError(f"{path}: {exc}") from exc
-    return parse_config(raw, origin=str(path))
+    return parse_config(raw, origin=str(path), declared_root=path.parent.resolve())
 
 
-def parse_config(raw: Any, origin: str = "<config>") -> Config:
+def parse_config(
+    raw: Any, origin: str = "<config>", declared_root: Path | None = None
+) -> Config:
     data = _mapping(raw, origin)
 
     version = data.get("version")
@@ -263,9 +275,14 @@ def parse_config(raw: Any, origin: str = "<config>") -> Config:
     if not isinstance(source, str):
         raise ConfigError(f"{origin}: source must be a string")
 
+    if declared_root is None:
+        origin_path = Path(origin)
+        if origin_path.is_file():
+            declared_root = origin_path.parent.resolve()
+
     hosts = _parse_hosts(data.get("hosts"), origin)
     profiles = _parse_profiles(data.get("profiles"), origin)
-    servers = _parse_servers(data.get("mcp"), origin)
+    servers = _parse_servers(data.get("mcp"), origin, declared_at=declared_root)
     lsp_servers = _parse_lsp_servers(data.get("lsp"), origin)
     agents = _parse_agents(data.get("agents"), origin)
 
@@ -324,6 +341,13 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
             plugins = OPENCODE_DEFAULT_PLUGINS
         else:
             plugins = ()
+        user_mcp_raw = body.get("user_mcp")
+        if user_mcp_raw is None:
+            user_mcp = name == "cursor"
+        elif isinstance(user_mcp_raw, bool):
+            user_mcp = user_mcp_raw
+        else:
+            raise ConfigError(f"{where}.user_mcp must be true or false")
         hosts[name] = Host(
             name=name,
             enabled=enabled,
@@ -331,6 +355,7 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
             emit_prefix=prefix,
             plugins=plugins,
             pin=_optional_str(body.get("pin"), f"{where}.pin"),
+            user_mcp=user_mcp,
         )
     return hosts
 
@@ -443,7 +468,9 @@ def _parse_lsp_choice(value: Any, where: str) -> LspChoice:
     raise ConfigError(f"{where} must be true, false, or a list of server names")
 
 
-def _parse_servers(raw: Any, origin: str) -> dict[str, McpServer]:
+def _parse_servers(
+    raw: Any, origin: str, declared_at: Path | None = None
+) -> dict[str, McpServer]:
     mcp = _mapping(raw, f"{origin}: mcp")
     servers: dict[str, McpServer] = {}
     for name, value in _mapping(mcp.get("servers"), f"{origin}: mcp.servers").items():
@@ -463,6 +490,7 @@ def _parse_servers(raw: Any, origin: str) -> dict[str, McpServer]:
             env=env,
             url=url,
             headers=headers,
+            declared_at=declared_at,
         )
     return servers
 

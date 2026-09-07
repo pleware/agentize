@@ -86,7 +86,9 @@ owns placement.
 
 **Implemented** as Task 16. `mount` always walks `mani.yaml`, inherit B
 (opt-out), rebases `--directory` / `-C` / `--project`, plants only
-`.cursor/mcp.json` plus `.agentize/parents.yaml`.
+`.cursor/mcp.json` plus `.agentize/parents.yaml`. Task 17 adds prefixed
+`agentize-*` keys to the user Cursor file so Customize lists them in a
+multi-root window.
 
 Consumer draft: `masstrade-workspace/drafts/48.DRAFT.agentize-cascade.md`.
 

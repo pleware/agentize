@@ -65,13 +65,31 @@ an observed parent is enough. Child policy merges on top (child wins).
 `inherit: []` or `inherit: false` refuses. `inherit: [mcp]` keeps only that
 channel.
 
-Relative `--directory`, `-C`, and `--project` in server commands are rewritten
-to the child cwd (so `uv run --directory masstrade-mcp-developer/orchestrator`
-becomes `../masstrade-mcp-developer/orchestrator` inside `masstrade/`).
+Relative `--directory`, `-C`, and `--project` are resolved from the
+`agentize.yaml` that **declared** the server, then rewritten to the plant
+cwd. A binder `mount` does not treat a child's command as if it lived on
+the binder. An inherited server still rebases from the parent yaml (so
+`uv run --directory family/orchestrator` becomes `../family/orchestrator`
+inside a product folder).
 
 Cascade writes only `.cursor/mcp.json` and `.agentize/parents.yaml`. It never
 plants `AGENTS.md`. Missing child paths are a skip. Scope is the `mani.yaml`
 you started in — MassTrade Atlassian does not leak into the binder.
+
+A binder with an empty `mcp:` list does not write an empty project
+`mcp.json` onto a child that has no `agentize.yaml`.
+
+### User MCP (`agentize-*`)
+
+Cursor's Customize → MCPs tab often hides project servers in a multi-root
+`.code-workspace`. `mount` also writes the planted human servers into
+`~/.cursor/mcp.json`, each renamed `agentize-<name>`, with absolute
+`--directory` paths. Only those prefixed keys are owned. Wren and the rest
+of the user file stay. `hosts.cursor.user_mcp: false` turns this off.
+`cleanup --home` removes the prefix keys.
+
+Last `mount` wins if two trees disagree. Two Cursor windows share one user
+file.
 
 ### Launchers
 

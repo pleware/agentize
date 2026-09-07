@@ -19,6 +19,7 @@ Plan and rationale: [`plan.md`](plan.md).
 | 11 Project-owned skills | done |
 | 12–15 Adoption | not started |
 | 16 Cascade down `mani.yaml` | done |
+| 17 User MCP `agentize-*` keys | done |
 
 Task 10 has an open item in [`../backlog.md`](../backlog.md); fetching skills
 from a remote repository is recorded there as a separate feature.
@@ -481,6 +482,8 @@ commands are rewritten to the child cwd. Observed parents go in
       without its own `agentize.yaml`
 - [x] `inherit: []` / `inherit: false` refuses MCP; `inherit: [mcp]` is a filter
 - [x] Relative directory flags rebase when planted in a child
+- [x] Rebase / absolutize from the yaml that declared the server (not
+      the `mount` cwd). Binder walk must not shift a child's own paths.
 - [x] Writes only `.cursor/mcp.json` and `.agentize/parents.yaml`
 - [x] Missing child paths are a skip, not an error
 - [x] Scope is the `mani.yaml` you started in
@@ -496,6 +499,35 @@ commands are rewritten to the child cwd. Observed parents go in
 `tests/test_cascade.py`
 
 **Estimated scope:** M
+
+---
+
+### Task 17: User MCP `agentize-*` keys
+
+**Description:** `mount` also syncs the current tree's human MCP list into
+`~/.cursor/mcp.json`, but only keys prefixed `agentize-`. Paths in
+`--directory` / `-C` / `--project` become absolute. Foreign user servers
+stay. A binder with `mcp: []` still unions servers from children that
+plant MCP. `cleanup --home` strips the prefix keys. Empty inherit from a
+binder does not write an empty project `mcp.json` on a bare child.
+
+**Acceptance criteria:**
+- [x] Cursor host `user_mcp` defaults on; `user_mcp: false` refuses
+- [x] Only `agentize-*` keys are added/removed in the user file
+- [x] Unprefixed sibling of a planted name is dropped (no duplicate process)
+- [x] `--directory` is absolutized from the yaml that declared the server
+- [x] Binder empty MCP does not wipe a child that has no `agentize.yaml`
+- [x] `mt-tools init` does not delete `agentize-*`
+
+**Verification:**
+- [x] `uv run pytest tests/test_user_mcp.py tests/test_cascade.py tests/test_config.py`
+
+**Dependencies:** Task 16
+
+**Files likely touched:** `src/agentize/user_mcp.py`, `src/agentize/cli.py`,
+`src/agentize/cascade.py`, `src/agentize/config.py`, `tests/test_user_mcp.py`
+
+**Estimated scope:** S
 
 ---
 
