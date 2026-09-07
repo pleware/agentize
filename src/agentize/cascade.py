@@ -17,6 +17,7 @@ from .config import CONFIG_NAME, Config, InheritSpec, McpServer, Profile, load_c
 from .errors import AgentizeError
 from .ignite import IGNITE_TOML
 from .mani import child_dirs, lists_descendant, load_mani
+from .markers import bind_markers
 from .mount import Plan, Write, apply, changes, plan_cursor
 from .store_tree import DIR_NAME, ensure_data_dir
 
@@ -93,7 +94,7 @@ def absolutize_servers(config: Config, from_root: Path) -> Config:
         )
         for name, server in config.servers.items()
     }
-    return replace(config, servers=servers)
+    return bind_markers(replace(config, servers=servers), from_root)
 
 
 def rebase_servers(config: Config, from_root: Path, to_root: Path) -> Config:
@@ -106,7 +107,7 @@ def rebase_servers(config: Config, from_root: Path, to_root: Path) -> Config:
         )
         for name, server in config.servers.items()
     }
-    return replace(config, servers=servers)
+    return bind_markers(replace(config, servers=servers), from_root)
 
 
 def read_kind(root: Path) -> str | None:

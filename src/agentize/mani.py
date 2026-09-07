@@ -78,3 +78,45 @@ def lists_descendant(registry: Path, target: Path) -> bool:
         if here == child or child in here.parents:
             return True
     return False
+
+
+def find_with_file(root: Path, rel: str | Path) -> Path | None:
+    """First directory at or under `root` (via `mani.yaml` only) that holds `rel`.
+
+    Does not `os.walk`. Names of children do not matter — only registry paths.
+    Binder → workspace → product of any company is the same walk.
+    """
+    marker = Path(rel)
+    if marker.is_absolute() or not str(rel):
+        return None
+    seen: set[Path] = set()
+    stack = [root.resolve()]
+    while stack:
+        here = stack.pop()
+        if here in seen:
+            continue
+        seen.add(here)
+        if (here / marker).is_file():
+            return here
+        stack.extend(reversed(child_dirs(here)))
+    return None
+
+
+def discover_up_and_down(start: Path, rel: str | Path) -> Path | None:
+    """Walk ancestors of `start`; at each one, search that node and its registry.
+
+    Finds a marker whether `start` is a binder, a company workspace, a product,
+    or a nested family checkout. Does not guess `parents[N]` or a folder name.
+    """
+    current = start.resolve()
+    seen: set[Path] = set()
+    while current not in seen:
+        seen.add(current)
+        found = find_with_file(current, rel)
+        if found is not None:
+            return found
+        parent = current.parent
+        if parent == current:
+            break
+        current = parent
+    return None

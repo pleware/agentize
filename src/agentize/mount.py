@@ -104,6 +104,10 @@ def plan_cursor(
     wanted: list = []
     skill_count = 0
     servers = config.servers_for(identity) if "mcp" in selected else ()
+    if servers:
+        from .markers import bind_server_markers
+
+        servers = tuple(bind_server_markers(server, project_root) for server in servers)
     host = config.hosts.get("cursor")
     prefix = (host.emit_prefix if host else "") or cursor.DEFAULT_PREFIX
 
@@ -153,6 +157,10 @@ def plan_cursor(
 def plan_opencode(project_root: Path, config: Config, identity: Profile) -> Plan:
     resolved = resolved_for(project_root, config, host="opencode", identity=identity)
     servers = config.servers_for(identity)
+    if servers:
+        from .markers import bind_server_markers
+
+        servers = tuple(bind_server_markers(server, project_root) for server in servers)
     target = project_root / opencode.CONFIG_FILE
 
     paths = opencode.instruction_paths(resolved, config.source)

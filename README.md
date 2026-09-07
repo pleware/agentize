@@ -79,6 +79,10 @@ you started in — MassTrade Atlassian does not leak into the binder.
 A binder with an empty `mcp:` list does not write an empty project
 `mcp.json` onto a child that has no `agentize.yaml`.
 
+`${marker:rel}` in planted MCP `env` walks that same `mani.yaml` tree
+(binder → workspace → product). It does not look up a product folder name.
+An unresolved marker is dropped so runtime discovery can still find the tree.
+
 ### User MCP (`agentize-*`)
 
 Cursor's Customize → MCPs tab often hides project servers in a multi-root
