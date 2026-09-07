@@ -25,6 +25,12 @@ The first makes agentize know about a third-party OpenCode plugin. The second
 risks turning agentize into a template engine, which is a different product.
 Decide before Task 13.
 
+**MassTrade consumer (2026-09-07):** plugin entry is `oh-my-openagent` on
+`hosts.opencode.plugins`. Template render of `.omo/omo.jsonc` stays
+`mt-tools init` until Task 14. Old MassTrade launcher is deprecated; BASIC/PRO
+map to profile `human` vs agent `default`. See
+`masstrade-workspace/drafts/47.DRAFT.agentize-atlassian-mcp.md`.
+
 ## Unfinished implementation
 
 ### Windows console handling for the OpenCode TUI
@@ -75,6 +81,23 @@ Two things make it a poor fit for v0:
 If a consumer asks for this, the open question is whether agentize shells out to
 `npx skills` at all, or simply documents that the CLI owns fetching and agentize
 owns placement.
+
+### Cascade down `mani.yaml` (MassTrade asked 2026-09-07)
+
+`mount` is one cwd. MassTrade wants: run at a workspace (or binder), walk
+`mani.yaml` children, overlay parent MCP/plugins, plant only what that
+ignite kind allows, and write an **observed** parent chain to each child's
+`.agentize/parents.yaml` (machine file). Committed `agentize.yaml` must not
+claim “I am nested” — the same product remote is also checked out alone.
+
+Do not invent a filesystem crawl. Do not plant `AGENTS.md` into kind
+`product`. Scope is the `mani.yaml` you started in (MassTrade Atlassian
+must not leak into the binder).
+
+Consumer draft: `masstrade-workspace/drafts/48.DRAFT.agentize-cascade.md`.
+**Decided:** `mount` always cascades (recursive `mani.yaml`). No `--cascade`
+flag. **B:** a child in `mani.yaml` with an observed parent inherits MCP
+without `agentize.yaml`; `inherit: []` is opt-out.
 
 ## Undecided design
 
