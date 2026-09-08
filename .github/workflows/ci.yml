@@ -20,7 +20,7 @@ jobs:
       - name: Install
         run: uv sync --group dev
 
-      # ruff stays local (tasks/todo.md). Pre-existing import order
+      # ruff stays local (tracked in the umbrella backlog). Pre-existing import order
       # would fail a public CI on a kit that is still abstract.
 
       - name: Tests + coverage

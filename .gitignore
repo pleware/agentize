@@ -19,3 +19,11 @@ graphify-out/
 
 # `.agentize/` needs no rule: it is machine state and carries its own `*`.
 # The policy it pairs with is `agentize.yaml` at the root, which is tracked.
+
+# Workspace-level Markdown. This kit is public and general-purpose; a backlog
+# and design drafts name the consumers that asked for each feature, so they
+# live in the private agentize umbrella instead of here.
+/backlog.md
+/drafts/
+/docs/
+/tasks/
