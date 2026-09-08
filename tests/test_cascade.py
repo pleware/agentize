@@ -27,7 +27,7 @@ profiles:
 mcp:
   servers:
     orchestrator:
-      command: [uv, run, --directory, family/orchestrator, masstrade-agent]
+      command: [uv, run, --directory, family/orchestrator, family-agent]
     atlassian:
       command: [uvx, mcp-atlassian]
 """
@@ -68,13 +68,13 @@ def test_rebase_directory_flag(tmp_path: Path):
     parent = tmp_path / "ws"
     child = parent / "erp"
     child.mkdir(parents=True)
-    command = ("uv", "run", "--directory", "family/orch", "masstrade-agent")
+    command = ("uv", "run", "--directory", "family/orch", "family-agent")
     assert rebase_command(command, parent, child) == (
         "uv",
         "run",
         "--directory",
         "../family/orch",
-        "masstrade-agent",
+        "family-agent",
     )
 
 
@@ -101,7 +101,7 @@ def test_mount_plants_mcp_on_existing_children(tmp_path: Path):
         "run",
         "--directory",
         "../family/orchestrator",
-        "masstrade-agent",
+        "family-agent",
     ]
     assert "atlassian" in servers
     parents = yaml.safe_load((erp / ".agentize" / "parents.yaml").read_text(encoding="utf-8"))

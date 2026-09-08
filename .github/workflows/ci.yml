@@ -27,7 +27,7 @@ jobs:
         run: uv run pytest --cov=agentize --cov-report=xml --cov-report=term
 
       # Coverage % stays informational in codecov.yml. A failed upload
-      # still fails the job — same as initagent / OES.
+      # still fails the job.
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

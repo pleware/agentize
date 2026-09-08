@@ -30,7 +30,7 @@ profiles:
 mcp:
   servers:
     orchestrator:
-      command: [uv, run, --directory, family/orch, masstrade-agent]
+      command: [uv, run, --directory, family/orch, family-agent]
     atlassian:
       command: [uvx, mcp-atlassian]
 """
@@ -62,7 +62,7 @@ def test_prefixed_name_is_stable():
 def test_absolutize_directory(tmp_path: Path):
     root = tmp_path / "ws"
     root.mkdir()
-    command = ("uv", "run", "--directory", "family/orch", "masstrade-agent")
+    command = ("uv", "run", "--directory", "family/orch", "family-agent")
     out = absolutize_command(command, root)
     assert Path(out[3]) == (root / "family/orch").resolve()
 
@@ -88,12 +88,12 @@ def test_render_keeps_foreign_keys_and_drops_stale_prefix(tmp_path: Path):
 
 def test_collect_unions_child_yaml(tmp_path: Path):
     parent = tmp_path / "binder"
-    child = parent / "masstrade-workspace"
+    child = parent / "example-workspace"
     child.mkdir(parents=True)
     write(parent / "agentize.yaml", PARENT.replace("mcp: [orchestrator, atlassian]", "mcp: []"))
     write(
         parent / "mani.yaml",
-        yaml.safe_dump({"projects": {"ws": {"path": "masstrade-workspace"}}}),
+        yaml.safe_dump({"projects": {"ws": {"path": "example-workspace"}}}),
     )
     write(child / "agentize.yaml", PARENT)
     config = parse_config(yaml.safe_load((parent / "agentize.yaml").read_text(encoding="utf-8")))

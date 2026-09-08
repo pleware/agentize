@@ -74,7 +74,7 @@ inside a product folder).
 
 Cascade writes only `.cursor/mcp.json` and `.agentize/parents.yaml`. It never
 plants `AGENTS.md`. Missing child paths are a skip. Scope is the `mani.yaml`
-you started in — MassTrade Atlassian does not leak into the binder.
+you started in — a child's own MCP servers do not leak up into the binder.
 
 A binder with an empty `mcp:` list does not write an empty project
 `mcp.json` onto a child that has no `agentize.yaml`.

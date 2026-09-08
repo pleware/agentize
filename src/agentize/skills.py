@@ -63,8 +63,7 @@ def plan_skills(
     """Which skills to write, and under what directory name.
 
     An empty selection means every resolved skill. A profile that lists names
-    narrows that set — the same "no selection means all" rule MassTrade's
-    installer applies.
+    narrows that set.
     """
     wanted = set(selected)
     emitted: dict[str, Emitted] = {}
