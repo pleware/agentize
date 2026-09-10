@@ -119,12 +119,23 @@ def plan_cursor(
         writes.extend(
             Write(dst / item.name, (source_root / item.source).read_bytes()) for item in wanted
         )
+        if any(item.name == cursor.GENERATED_RULE_NAME for item in wanted):
+            raise MountError(
+                f"a source rule would be written as {cursor.GENERATED_RULE_NAME}. "
+                "That name is reserved for the generated leave-alone rule."
+            )
+        writes.append(
+            Write(cursor.generated_rule_path(project_root), cursor.generated_rule_bytes())
+        )
+        wanted_names = [item.name for item in wanted]
+        if cursor.GENERATED_RULE_NAME.startswith(prefix):
+            wanted_names.append(cursor.GENERATED_RULE_NAME)
         existing = (
             sorted(item.name for item in dst.glob(f"*{cursor.RULE_SUFFIX}") if item.is_file())
             if dst.is_dir()
             else []
         )
-        stale = cursor.stale_names(existing, [item.name for item in wanted], prefix)
+        stale = cursor.stale_names(existing, wanted_names, prefix)
         deletes.extend(dst / name for name in stale)
 
     if "mcp" in selected:
@@ -144,9 +155,10 @@ def plan_cursor(
         writes.extend(skill_writes)
         deletes.extend(skill_deletes)
 
+    rule_count = len(wanted) + (1 if "rules" in selected else 0)
     label = ", ".join(
         (
-            _count(len(wanted), "rule"),
+            _count(rule_count, "rule"),
             _count(skill_count, "skill"),
             _count(len(servers), "mcp server"),
         )

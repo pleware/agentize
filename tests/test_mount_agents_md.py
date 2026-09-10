@@ -81,6 +81,7 @@ def test_only_rules_are_listed():
     block = agents_md.render_block(resolved, Path(".agents"))
     assert "shared/a.mdc" in block
     assert "notes.md" not in block
+    assert "Do not edit `.cursor/rules/`" in block
 
 
 # --- mount end to end ---
@@ -92,6 +93,7 @@ def test_agents_md_lists_the_resolved_rules(project: Path):
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "- [core/style.mdc](.agents/shared/core/style.mdc)" in text
     assert "- [php/types.mdc](.agents/shared/php/types.mdc)" in text
+    assert "Do not edit `.cursor/rules/`" in text
 
 
 def test_agents_md_ignores_the_host_layer(project: Path):

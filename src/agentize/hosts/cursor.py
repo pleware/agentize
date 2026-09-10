@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from ..config import McpServer
@@ -20,6 +20,30 @@ from ..resolve import ResolvedFile
 RULES_DIR = ".cursor/rules"
 RULE_SUFFIX = ".mdc"
 DEFAULT_PREFIX = "auto."
+# Always this filename, even when emit_prefix is longer than `auto.`
+# (for example `auto.mt.`). Pruning still keys off emit_prefix, so a
+# longer prefix will not delete this file.
+GENERATED_RULE_STEM = "do-not-edit"
+GENERATED_RULE_NAME = f"{DEFAULT_PREFIX}{GENERATED_RULE_STEM}{RULE_SUFFIX}"
+GENERATED_RULE_TEXT = """\
+---
+description: Do not edit agentize-generated Cursor rules (auto.* filenames).
+globs: .cursor/rules/auto*
+alwaysApply: true
+---
+
+# Generated Cursor rules
+
+Do not edit, move, or delete files in `.cursor/rules/` whose names start
+with `auto.` — including `auto.mt.`. `agentize mount` writes them from the
+`source:` tree in `agentize.yaml` (usually `.agents/`).
+
+To change a generated rule, edit the source file, then run
+`agentize mount`. Do not patch the emitted copy.
+
+The same prefix marks skills agentize copies into `.cursor/skills/` and
+`.opencode/skills/`. Leave those directories alone too.
+"""
 
 SKILLS_DIR = ".cursor/skills"
 
@@ -31,6 +55,14 @@ MCP_KEY = "mcpServers"
 class Emitted:
     name: str
     source: str
+
+
+def generated_rule_path(project_root: Path) -> Path:
+    return project_root / RULES_DIR / GENERATED_RULE_NAME
+
+
+def generated_rule_bytes() -> bytes:
+    return GENERATED_RULE_TEXT.encode("utf-8")
 
 
 def emit_name(key: str, prefix: str) -> str:

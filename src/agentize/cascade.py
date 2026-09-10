@@ -1,8 +1,9 @@
 """Walk `mani.yaml` and plant parent MCP into existing children.
 
 `mount` at a registry always cascades. A child without `agentize.yaml` still
-inherits (opt-out is `inherit: []` / `inherit: false`). Cascade writes only
-`.cursor/mcp.json` and `.agentize/parents.yaml` — never `AGENTS.md`.
+inherits (opt-out is `inherit: []` / `inherit: false`). Cascade writes
+`.cursor/mcp.json`, `.cursor/rules/auto.do-not-edit.mdc`, and
+`.agentize/parents.yaml` — never `AGENTS.md`.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import yaml
 
 from .config import CONFIG_NAME, Config, InheritSpec, McpServer, Profile, load_config
 from .errors import AgentizeError
+from .hosts import cursor
 from .ignite import IGNITE_TOML
 from .mani import child_dirs, lists_descendant, load_mani
 from .markers import bind_markers
@@ -211,6 +213,13 @@ def plan_parents_file(child: Path) -> Plan:
     )
 
 
+def plan_generated_rule(child: Path) -> Plan:
+    return Plan(
+        label="cursor: generated rule",
+        writes=(Write(cursor.generated_rule_path(child), cursor.generated_rule_bytes()),),
+    )
+
+
 def plan_inherited_mcp(
     parent_root: Path,
     child: Path,
@@ -242,7 +251,11 @@ def plant_child(
     *,
     check: bool,
 ) -> list[tuple[str, Plan, tuple[str, ...]]]:
-    """Plant inherited MCP + observed parents. Skip when inherit refuses."""
+    """Plant inherited MCP, the leave-alone rule, and observed parents.
+
+    Skip MCP when inherit refuses. The generated Cursor rule still lands so
+    agents do not patch `auto.*` files in a child that has none of its own.
+    """
     results: list[tuple[str, Plan, tuple[str, ...]]] = []
     spec = inherit_spec(child)
     label = posix_rel(child, parent_root)
@@ -252,6 +265,8 @@ def plant_child(
         mcp_plan = plan_inherited_mcp(parent_root, child, parent_config, parent_identity)
         results.append((label, mcp_plan, apply_or_check(child, mcp_plan, check=check)))
     ensure_data_dir(child)
+    rule_plan = plan_generated_rule(child)
+    results.append((label, rule_plan, apply_or_check(child, rule_plan, check=check)))
     parents_plan = plan_parents_file(child)
     results.append((label, parents_plan, apply_or_check(child, parents_plan, check=check)))
     return results

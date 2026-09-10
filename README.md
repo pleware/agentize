@@ -72,9 +72,10 @@ the binder. An inherited server still rebases from the parent yaml (so
 `uv run --directory family/orchestrator` becomes `../family/orchestrator`
 inside a product folder).
 
-Cascade writes only `.cursor/mcp.json` and `.agentize/parents.yaml`. It never
-plants `AGENTS.md`. Missing child paths are a skip. Scope is the `mani.yaml`
-you started in — a child's own MCP servers do not leak up into the binder.
+Cascade writes `.cursor/mcp.json`, `.cursor/rules/auto.do-not-edit.mdc`,
+and `.agentize/parents.yaml`. It never plants `AGENTS.md`. Missing child
+paths are a skip. Scope is the `mani.yaml` you started in — a child's own
+MCP servers do not leak up into the binder.
 
 A binder with an empty `mcp:` list does not write an empty project
 `mcp.json` onto a child that has no `agentize.yaml`.
@@ -175,6 +176,8 @@ A **profile** is who is driving (a human, today). An **agent slug** is which bot
 A skill layers like everything else, with one difference: the **directory** is the unit. The winning layer supplies the whole skill, never a mixture.
 
 Each host receives its own copy, in a directory only that host reads: `.cursor/skills` and `.opencode/skills`.
+
+<small>Cursor also gets <code>.cursor/rules/auto.do-not-edit.mdc</code> on every <code>mount</code> (and on every cascaded child). That rule is always-on: do not edit any <code>.cursor/rules/auto*</code> file; change <code>.agents/</code> and remount. The same prefix marks copied skills.</small>
 
 <small>A <code>SKILL.md</code> from one layer describing helper files from another is not a skill anybody wrote. agentize never writes into <code>.agents/skills</code>, <code>.claude/skills</code> or <code>.codex/skills</code>, which several hosts scan in common — so a skill intended for one host cannot be picked up by another, and there is nothing to clean up after the fact. agentize copies skills the project already owns. It does not fetch them — <code>npx skills</code> and the host marketplaces do that.</small>
 

@@ -17,6 +17,10 @@ END = "<!-- agentize:end -->"
 NOTE = "<!-- Managed by agentize. Edits between these markers are overwritten. -->"
 RULE_SUFFIX = ".mdc"
 HEADING = "## Project rules"
+GENERATED = (
+    "Do not edit `.cursor/rules/` files whose names start with `auto.` "
+    "(including `auto.mt.`). They are written by `agentize mount`."
+)
 
 
 def rules(resolved: Iterable[ResolvedFile]) -> tuple[ResolvedFile, ...]:
@@ -25,7 +29,7 @@ def rules(resolved: Iterable[ResolvedFile]) -> tuple[ResolvedFile, ...]:
 
 
 def render_block(resolved: Iterable[ResolvedFile], source: Path) -> str:
-    lines = [BEGIN, NOTE, "", HEADING, ""]
+    lines = [BEGIN, NOTE, "", HEADING, "", GENERATED, ""]
     for item in rules(resolved):
         lines.append(f"- [{item.key}]({(source / item.path).as_posix()})")
     lines.append(END)
