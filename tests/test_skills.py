@@ -8,11 +8,11 @@ from agentize.cli import main
 from agentize.errors import MountError
 from agentize.resolve import ResolvedFile
 from agentize.skills import (
+    known_skill_names,
     plan_skills,
     skill_resolve_map,
     skill_units,
     stale_dir_names,
-    unknown_names,
 )
 
 CONFIG = """\
@@ -123,9 +123,14 @@ def test_a_rule_is_not_mistaken_for_a_skill():
     assert plan_skills(items, "agentize.auto.generated.") == ()
 
 
-def test_an_unknown_selected_name_is_reported():
-    items = resolved(("skills/review", "shared/skills/review"))
-    assert unknown_names(items, ["review", "ghost"]) == ("ghost",)
+def test_known_skill_names_span_layers():
+    units = (
+        "skills/review",
+        "shared/skills/deploy",
+        "hosts/cursor/skills/graphify",
+        "profiles/agent/skills/release",
+    )
+    assert known_skill_names(units) == {"review", "deploy", "graphify", "release"}
 
 
 def test_stale_directories_ignore_hand_written_ones():

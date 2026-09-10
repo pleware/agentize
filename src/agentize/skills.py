@@ -120,18 +120,23 @@ def plan_skills(
     return tuple(emitted[key] for key in sorted(emitted))
 
 
-def unknown_names(resolved: Iterable[ResolvedFile], selected: Iterable[str]) -> tuple[str, ...]:
-    """Names a profile asks for that no layer provides.
+def known_skill_names(units: Iterable[str]) -> frozenset[str]:
+    """Every authored skill name across every layer and host.
 
-    Silently emitting nothing would read as "this profile has no skills" rather
-    than "that skill does not exist".
+    A name scoped to another host's private layer (``hosts/<host>/skills/``)
+    is still a known name — it is simply not visible to every host. A mount
+    should refuse only a name that exists nowhere, so the "unknown" check
+    compares the identity's `skills` selection against this set, not against
+    one host's resolved view.
     """
-    available = {
-        item.key.split("/")[1]
-        for item in resolved
-        if item.key.startswith(f"{SEGMENT}/") and item.key.count("/") == 1
-    }
-    return tuple(sorted(name for name in selected if name not in available))
+    names: set[str] = set()
+    for raw in units:
+        unit = raw.replace("\\", "/")
+        if unit.startswith(f"{SEGMENT}/"):
+            names.add(unit[len(SEGMENT) + 1 :].split("/", 1)[0])
+        elif f"/{SEGMENT}/" in unit:
+            names.add(unit.split(f"/{SEGMENT}/", 1)[1].split("/", 1)[0])
+    return frozenset(names)
 
 
 def stale_dir_names(existing: Iterable[str], wanted: Iterable[str], prefix: str) -> tuple[str, ...]:

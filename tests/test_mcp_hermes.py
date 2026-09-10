@@ -409,6 +409,36 @@ def test_a_hermes_profile_asking_for_an_absent_skill_fails(tmp_path: Path, monke
     assert "review" in capsys.readouterr().err
 
 
+def test_a_cursor_scoped_skill_does_not_fail_hermes(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(
+        project / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n"
+        "  cursor:\n    emit_prefix: agentize.auto.generated.\n"
+        "  hermes: {}\n"
+        "profiles:\n"
+        "  human:\n    default: true\n    mcp: [postgres]\n    skills: [graphify]\n"
+        "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
+    )
+    write(
+        project / ".agents" / "hosts" / "cursor" / "skills" / "graphify" / "SKILL.md",
+        "# cursor\n",
+    )
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    # Cursor plants the skill it owns; Hermes must not fail on it.
+    assert (
+        project / ".cursor" / "skills" / "agentize.auto.generated.graphify" / "SKILL.md"
+    ).is_file()
+    profile = home / "profiles" / f"{PREFIX}human"
+    assert (profile / "config.yaml").is_file()
+    assert not (profile / "skills" / "agentize.auto.generated.graphify").exists()
+
+
 def test_hermes_emit_prefix_names_the_skill_directory(tmp_path: Path, monkeypatch):
     home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"

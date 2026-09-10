@@ -109,14 +109,16 @@ def _plan_host_skills(
     them apart in the destination directory.
     """
     source_root = project_root / config.source
-    disk_by_listing = skills.skill_resolve_map(skills.skill_units(list_files(source_root)))
+    units = skills.skill_units(list_files(source_root))
+    disk_by_listing = skills.skill_resolve_map(units)
+    known = skills.known_skill_names(units)
     qualify = len(identities) > 1
 
     emitted: dict[str, skills.Emitted] = {}
     for identity in identities:
         resolved = resolve(config, disk_by_listing, host=host, identity=identity)
         selected = identity.skills
-        missing = skills.unknown_names(resolved, selected)
+        missing = tuple(sorted(name for name in selected if name not in known))
         if missing:
             raise MountError(
                 f"identity {identity.name!r} asks for skills no layer provides: "
