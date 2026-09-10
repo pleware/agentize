@@ -6,9 +6,10 @@ describes helpers that came from somewhere else, so the winning layer supplies
 the whole thing or none of it.
 
 Each host writes into a directory only that host reads, which is what keeps a
-profile's skills from leaking sideways. No skill is ever installed into the
-directories several hosts scan in common (`.agents/skills`, `.claude/skills`,
-`.codex/skills`), so there is nothing to clean up afterwards.
+profile's skills from leaking sideways. Cursor and OpenCode use project
+folders; Hermes uses the dedicated profile ``skills/`` tree. No skill is ever
+installed into the directories several hosts scan in common (`.agents/skills`,
+`.claude/skills`, `.codex/skills`), so there is nothing to clean up afterwards.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from .resolve import ResolvedFile
 
 MARKER = "SKILL.md"
 SEGMENT = "skills"
+SHARED_LAYER = "shared"
 DEFAULT_PREFIX = "auto."
 
 
@@ -51,19 +53,46 @@ def skill_units(listing: Iterable[str]) -> tuple[str, ...]:
     return tuple(sorted(units))
 
 
-def emit_dir_name(name: str, prefix: str) -> str:
+def skill_resolve_map(units: Iterable[str]) -> dict[str, str]:
+    """Map a resolve listing path to the directory on disk.
+
+    skillize writes ``<source>/skills/<name>/``. Layered source uses
+    ``<source>/shared/skills/<name>/``. A root tree competes as shared so a
+    real shared copy still wins, and ``item.path`` from resolve can be
+    rewritten back to the files that exist.
+    """
+    mapping: dict[str, str] = {}
+    for raw in units:
+        unit = raw.replace("\\", "/")
+        if unit.startswith(f"{SEGMENT}/") and unit.count("/") == 1:
+            mapping.setdefault(f"{SHARED_LAYER}/{unit}", unit)
+        else:
+            mapping[unit] = unit
+    return mapping
+
+
+def emit_dir_name(name: str, prefix: str, qualifier: str | None = None) -> str:
+    """`review` → `auto.review`, or `auto.human.review` when an identity is named.
+
+    A skill already spelled with the prefix keeps its name: the author chose it.
+    """
     if prefix and name.startswith(prefix):
         return name
-    return f"{prefix}{name}"
+    stem = f"{qualifier}.{name}" if qualifier else name
+    return f"{prefix}{stem}"
 
 
 def plan_skills(
-    resolved: Iterable[ResolvedFile], prefix: str, selected: Iterable[str] = ()
+    resolved: Iterable[ResolvedFile],
+    prefix: str,
+    selected: Iterable[str] = (),
+    qualifier: str | None = None,
 ) -> tuple[Emitted, ...]:
     """Which skills to write, and under what directory name.
 
     An empty selection means every resolved skill. A profile that lists names
-    narrows that set.
+    narrows that set. `qualifier` is the identity label; two identities that
+    resolve the same source under it are one entry, not a clash.
     """
     wanted = set(selected)
     emitted: dict[str, Emitted] = {}
@@ -76,9 +105,11 @@ def plan_skills(
         if wanted and name not in wanted:
             continue
 
-        dir_name = emit_dir_name(name, prefix)
+        dir_name = emit_dir_name(name, prefix, qualifier)
         clash = emitted.get(dir_name)
         if clash is not None:
+            if clash.source == item.path:
+                continue
             raise MountError(
                 f"{clash.source} and {item.path} would both be written as {dir_name}. "
                 "Skill directory names must be unique within a host."

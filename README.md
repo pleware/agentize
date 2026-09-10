@@ -47,6 +47,7 @@ Add `agentize.yaml` (and, for bots, `ignite.toml` + `mise.toml`) and run `./agen
 ./agentize run --agent php    # plant ignite if needed, ensure tools, mount, start
 ./agentize run --global       # escape hatch: the host on PATH
 ./agentize mount --agent php  # render without starting
+./agentize mount --profile-all  # render every declared identity, side by side
 ./agentize mount --check      # CI gate: fail if the rendered output is stale
 ./agentize cleanup       # remove .agentize/ and planted launchers
 ./agentize --cleanup --home  # also remove ~/.agentize/
@@ -88,6 +89,34 @@ home (see [Host support](#host-support)).
 (binder → workspace → product). It does not look up a product folder name.
 An unresolved marker is dropped so runtime discovery can still find the tree.
 
+### Every identity at once (`--profile-all`)
+
+`mount --profile-all` renders every declared identity — every entry under
+`profiles:` and every slug under `agents:` (so `agents.default` is labelled
+`agent`, like its Hermes home) — instead of the selected one. `run` is
+unaffected: it still starts a single identity, because it starts a process.
+
+One project file holds one flat set of names, so the identity goes into the
+name and nothing overwrites anything:
+
+| Artifact | One identity | `--profile-all` |
+| --- | --- | --- |
+| `.cursor/rules/` | `auto.style.mdc` | `auto.human.style.mdc`, `auto.php.style.mdc` |
+| `.cursor/skills/`, `.opencode/skills/` | `auto.review/` | `auto.human.review/`, `auto.php.review/` |
+| project `mcpServers` / `mcp` keys | `postgres` | `human.postgres`, `php.postgres` |
+| `~/.cursor/mcp.json` keys | `agentize-postgres` | `agentize-human.postgres` |
+| `AGENTS.md` | one flat rule list | one `### <label> (<kind>)` section per identity |
+| `opencode.json` `lsp` | that identity's choice | union; `all` anywhere wins, all-off stays `false` |
+
+Pruning stays a union: switching back to one identity deletes the qualified
+files of the others, and the generated `auto.do-not-edit.mdc` belongs to the
+host, not to an identity. Passing `--profile-all` together with
+`--profile`/`--agent` is refused.
+
+Cascade follows: `--profile-all` at a registry plants every identity's servers
+into each child's single `.cursor/mcp.json`. Hermes already plants every
+identity — each under its own profile home — with or without the flag.
+
 ### User MCP (`agentize-*`)
 
 Cursor's Customize → MCPs tab often hides project servers in a multi-root
@@ -101,12 +130,14 @@ Last `mount` wins if two trees disagree. Two Cursor windows share one user
 file.
 
 Hermes uses the same `agentize-` prefix inside a dedicated Desktop profile
-(`<hermes-root>/profiles/agentize-<label>/config.yaml`). `mount` writes every
+(`<hermes-root>/profiles/agentize-<label>/`). `mount` writes every
 declared profile and agent slug: `profiles.human` → `agentize-human`,
-`agents.default` → `agentize-agent`. `isolate_data` does not hide the bot
-from Desktop. The root is the first existing of `%LOCALAPPDATA%/hermes`
-(Windows) then `~/.hermes`. `cleanup --home` removes those profile
-directories. The default Hermes Desktop home is not rewritten.
+`agents.default` → `agentize-agent`. Owned MCP keys go in that profile's
+`config.yaml`. Project skills go in that profile's `skills/` tree under
+`emit_prefix` (default `auto.`), so bundled Hermes skills stay. `isolate_data`
+does not hide the bot from Desktop. The root is the first existing of
+`%LOCALAPPDATA%/hermes` (Windows) then `~/.hermes`. `cleanup --home` removes
+those profile directories. The default Hermes Desktop home is not rewritten.
 
 ### Launchers
 
@@ -179,15 +210,16 @@ A **profile** is who is driving (a human, today). An **agent slug** is which bot
     skills/review/     a skill: any directory holding SKILL.md
   hosts/cursor/      any profile, in Cursor
   hosts/opencode/
+  hosts/hermes/
   profiles/human/    any host, driven by a human
   profiles/agent/    any host, driven by a bot
 ```
 
 ### Skills
 
-A skill layers like everything else, with one difference: the **directory** is the unit. The winning layer supplies the whole skill, never a mixture.
+A skill layers like everything else, with one difference: the **directory** is the unit. The winning layer supplies the whole skill, never a mixture. A tree at `<source>/skills/<name>/` (skillize / `npx skills`) competes as `shared/skills/<name>/`.
 
-Each host receives its own copy, in a directory only that host reads: `.cursor/skills` and `.opencode/skills`.
+Each host receives its own copy, in a directory only that host reads: `.cursor/skills`, `.opencode/skills`, and the Hermes profile `skills/` tree (`<hermes-root>/profiles/agentize-<label>/skills/auto.*`).
 
 <small>Cursor also gets <code>.cursor/rules/auto.do-not-edit.mdc</code> on every <code>mount</code> (and on every cascaded child). That rule is always-on: do not edit any <code>.cursor/rules/auto*</code> file; change <code>.agents/</code> and remount. The same prefix marks copied skills.</small>
 
@@ -221,7 +253,7 @@ hosts:
     plugins:
       - opencode-extended-sidebar  # TUI sidebar; omitted plugins default to this
       - oh-my-openagent            # server plugin; OpenCode installs both at startup
-  hermes: {}                    # MCP into a Hermes profile; no isolated binary
+  hermes: {}                    # MCP + skills into a Hermes profile; no isolated binary
   claude: { enabled: false }
   codex:  { enabled: false }
 
@@ -305,6 +337,7 @@ worktree:
 
 <hermes-root>/profiles/agentize-<identity>/
   config.yaml          owned `mcp_servers.agentize-*` keys; rest of Hermes stays
+  skills/auto.<name>/  project skills; bundled Hermes skills are not prefixed
                        Windows native root is %LOCALAPPDATA%/hermes, else ~/.hermes
 ```
 
@@ -383,7 +416,7 @@ agents:
 
 ### Cursor limitation
 
-Cursor merges `~/.cursor/mcp.json` with `.cursor/mcp.json`, and on a name collision the project entry wins. A profile can **redefine** a server, but it cannot **remove** one.
+Cursor merges `~/.cursor/mcp.json` with `.cursor/mcp.json`, and on a name collision the project entry wins. A profile can **redefine** a server, but it cannot **remove** one. With `--profile-all` the project keys carry the identity (`human.postgres`), so all of them coexist instead of the last one winning.
 
 <small>Cursor documents disabling only as a toggle in the sidebar, with no committable file behind it. The practical answer is to keep the global file empty and let agentize render <code>.cursor/mcp.json</code> per project. Then each project gets exactly what its profile declares, and nothing else. Per-tool denies can go in <code>.cursor/cli.json</code>, which does live in the repository. Claude Code and Codex can subtract. OpenCode is rendered whole, so it is already exact.</small>
 

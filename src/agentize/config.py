@@ -24,6 +24,34 @@ SECRET_HINTS = ("token", "secret", "password", "passwd", "credential", "auth", "
 NEED_TOOL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]*$")
 INHERIT_CHANNELS = frozenset({"mcp"})
 
+# Every key the parser reads. A key outside these sets is a typo, not a
+# forward-compatible extension: `isolat_data` would silently leave the
+# machine's own database in place, so the failure has to be loud.
+TOP_LEVEL_KEYS = frozenset(
+    {
+        "version",
+        "source",
+        "hosts",
+        "profiles",
+        "agents",
+        "mcp",
+        "lsp",
+        "skills",
+        "worktree",
+        "inherit",
+    }
+)
+HOST_KEYS = frozenset({"enabled", "default", "emit_prefix", "plugins", "pin", "user_mcp"})
+GIT_KEYS = frozenset({"user_name", "user_email", "push_remote"})
+PROFILE_KEYS = frozenset({"default", "isolate_data", "git", "mcp", "skills", "lsp"})
+AGENT_KEYS = PROFILE_KEYS | {"needs"}
+MCP_SECTION_KEYS = frozenset({"servers"})
+LSP_SECTION_KEYS = frozenset({"servers"})
+MCP_SERVER_KEYS = frozenset({"command", "url", "env", "headers"})
+LSP_SERVER_KEYS = frozenset({"command", "extensions", "env", "initialization", "disabled"})
+SKILLS_KEYS = frozenset({"lock"})
+WORKTREE_KEYS = frozenset({"dir"})
+
 
 class ConfigError(AgentizeError):
     """The configuration is missing, unreadable, or does not describe a valid setup."""
@@ -151,6 +179,18 @@ class LspServer:
     disabled: bool = False
 
 
+def identity_label(identity: Profile) -> str:
+    """How a rendered name spells this identity: `human`, `php`, `agent`.
+
+    One label feeds every host: a Hermes profile directory, an identity-qualified
+    rule file, an MCP key and a copied skill directory. `agents.default` is
+    labelled `agent`, so it reads the same as `agentize-agent`.
+    """
+    if identity.origin == "agent" and identity.name == DEFAULT_AGENT:
+        return "agent"
+    return identity.name
+
+
 @dataclass(frozen=True)
 class Config:
     version: int
@@ -180,6 +220,25 @@ class Config:
 
     def enabled_hosts(self) -> tuple[Host, ...]:
         return tuple(host for host in self.hosts.values() if host.enabled)
+
+    def all_identities(self) -> tuple[Profile, ...]:
+        """Every declared identity, unique by label, profiles before slugs.
+
+        Hermes already plants all of them (each gets its own profile home);
+        `mount --profile-all` renders the same set for the other hosts.
+        """
+        seen: set[str] = set()
+        out: list[Profile] = []
+        for identity in (
+            *self.profiles.values(),
+            *(self.resolve_agent(slug) for slug in self.agents),
+        ):
+            key = identity_label(identity)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(identity)
+        return tuple(out)
 
     def servers_for(self, profile: Profile) -> tuple[McpServer, ...]:
         """The profile's servers, in the order the profile declares them."""
@@ -264,6 +323,7 @@ def parse_config(
     raw: Any, origin: str = "<config>", declared_root: Path | None = None
 ) -> Config:
     data = _mapping(raw, origin)
+    _reject_unknown_keys(data, TOP_LEVEL_KEYS, origin, sep=": ")
 
     version = data.get("version")
     if version != SUPPORTED_VERSION:
@@ -294,11 +354,13 @@ def parse_config(
     _check_single_default_host(hosts, origin)
 
     skills = _mapping(data.get("skills"), f"{origin}: skills")
+    _reject_unknown_keys(skills, SKILLS_KEYS, f"{origin}: skills")
     lock = skills.get("lock")
     if lock is not None and not isinstance(lock, str):
         raise ConfigError(f"{origin}: skills.lock must be a string")
 
     worktree = _mapping(data.get("worktree"), f"{origin}: worktree")
+    _reject_unknown_keys(worktree, WORKTREE_KEYS, f"{origin}: worktree")
     worktree_dir = worktree.get("dir")
     if worktree_dir is not None and not isinstance(worktree_dir, str):
         raise ConfigError(f"{origin}: worktree.dir must be a string")
@@ -322,6 +384,12 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
     for name, value in _mapping(raw, f"{origin}: hosts").items():
         where = f"{origin}: hosts.{name}"
         body = _mapping(value, where)
+        if "addons" in body and "plugins" not in body:
+            raise ConfigError(
+                f"{where}: 'addons' was renamed to 'plugins' "
+                "(OpenCode's own word for the list in opencode.json / tui.json)"
+            )
+        _reject_unknown_keys(body, HOST_KEYS, where)
         enabled = body.get("enabled", True)
         if not isinstance(enabled, bool):
             raise ConfigError(f"{where}.enabled must be true or false")
@@ -331,11 +399,6 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         prefix = body.get("emit_prefix", "")
         if not isinstance(prefix, str):
             raise ConfigError(f"{where}.emit_prefix must be a string")
-        if "addons" in body and "plugins" not in body:
-            raise ConfigError(
-                f"{where}: 'addons' was renamed to 'plugins' "
-                "(OpenCode's own word for the list in opencode.json / tui.json)"
-            )
         if "plugins" in body:
             plugins = _str_list(body.get("plugins"), f"{where}.plugins")
         elif name == "opencode":
@@ -366,6 +429,7 @@ def _parse_profiles(raw: Any, origin: str) -> dict[str, Profile]:
     for name, value in _mapping(raw, f"{origin}: profiles").items():
         where = f"{origin}: profiles.{name}"
         body = _mapping(value, where)
+        _reject_unknown_keys(body, PROFILE_KEYS, where)
         for key in ("default", "isolate_data"):
             if key in body and not isinstance(body[key], bool):
                 raise ConfigError(f"{where}.{key} must be true or false")
@@ -396,6 +460,7 @@ def _parse_agents(raw: Any, origin: str) -> dict[str, AgentSpec]:
                 f"{where} collides with OpenCode's built-in agent; pick another slug"
             )
         body = _mapping(value, where)
+        _reject_unknown_keys(body, AGENT_KEYS, where)
         if "isolate_data" in body and not isinstance(body["isolate_data"], bool):
             raise ConfigError(f"{where}.isolate_data must be true or false")
         agents[name] = AgentSpec(
@@ -420,9 +485,7 @@ def _parse_git(raw: Any, where: str) -> GitIdentity | None:
     git_body = _mapping(raw, where)
     if not git_body:
         return None
-    for key in git_body:
-        if key not in {"user_name", "user_email", "push_remote"}:
-            raise ConfigError(f"{where}.{key} is not a known key")
+    _reject_unknown_keys(git_body, GIT_KEYS, where)
     return GitIdentity(
         user_name=_optional_str(git_body.get("user_name"), f"{where}.user_name"),
         user_email=_optional_str(git_body.get("user_email"), f"{where}.user_email"),
@@ -473,10 +536,12 @@ def _parse_servers(
     raw: Any, origin: str, declared_at: Path | None = None
 ) -> dict[str, McpServer]:
     mcp = _mapping(raw, f"{origin}: mcp")
+    _reject_unknown_keys(mcp, MCP_SECTION_KEYS, f"{origin}: mcp")
     servers: dict[str, McpServer] = {}
     for name, value in _mapping(mcp.get("servers"), f"{origin}: mcp.servers").items():
         where = f"{origin}: mcp.servers.{name}"
         body = _mapping(value, where)
+        _reject_unknown_keys(body, MCP_SERVER_KEYS, where)
         command = _str_list(body.get("command"), f"{where}.command")
         url = _optional_str(body.get("url"), f"{where}.url")
         if bool(command) == bool(url):
@@ -498,10 +563,12 @@ def _parse_servers(
 
 def _parse_lsp_servers(raw: Any, origin: str) -> dict[str, LspServer]:
     lsp = _mapping(raw, f"{origin}: lsp")
+    _reject_unknown_keys(lsp, LSP_SECTION_KEYS, f"{origin}: lsp")
     servers: dict[str, LspServer] = {}
     for name, value in _mapping(lsp.get("servers"), f"{origin}: lsp.servers").items():
         where = f"{origin}: lsp.servers.{name}"
         body = _mapping(value, where)
+        _reject_unknown_keys(body, LSP_SERVER_KEYS, where)
         disabled = body.get("disabled", False)
         if not isinstance(disabled, bool):
             raise ConfigError(f"{where}.disabled must be true or false")
@@ -654,6 +721,20 @@ def _check_single_default_host(hosts: dict[str, Host], origin: str) -> None:
     defaults = [name for name, host in hosts.items() if host.default]
     if len(defaults) > 1:
         raise ConfigError(f"{origin}: more than one default host: {', '.join(sorted(defaults))}")
+
+
+def _reject_unknown_keys(
+    body: dict[str, Any], known: frozenset[str], where: str, *, sep: str = "."
+) -> None:
+    """Refuse a key this build does not read, and name the ones it does.
+
+    Ignoring an unknown key makes a typo indistinguishable from a deliberate
+    omission, and the two disagree about safety (`isolate_data`).
+    """
+    unknown = sorted(key for key in body if key not in known)
+    if unknown:
+        listed = ", ".join(sorted(known))
+        raise ConfigError(f"{where}{sep}{unknown[0]} is not a known key (known: {listed})")
 
 
 def _mapping(value: Any, where: str) -> dict[str, Any]:

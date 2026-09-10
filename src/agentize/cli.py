@@ -8,26 +8,30 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .cascade import cascade, find_inherit_root, plant_child
+from .cascade import cascade, cascade_all, find_inherit_root, plant_child, plant_child_all
 from .cleanup import apply_cleanup, describe, plan_cleanup
 from .config import CONFIG_NAME, ConfigError, Profile, load_config
 from .errors import AgentizeError
+from .hosts import hermes
 from .ignite import ensure_toolchain
 from .install import fetch_host
 from .launch import executable, global_executable, launch_env, prepare, select_host, spawn
 from .markers import bind_server_markers
-from .hosts import hermes
 from .mount import (
     Plan,
     apply,
     changes,
     plan_agents_md,
+    plan_agents_md_all,
     plan_cursor,
+    plan_cursor_all,
     plan_opencode,
+    plan_opencode_all,
 )
 from .session import LastRun, load_last, remember
 from .store_tree import config_is_ignored, config_path, ensure_data_dir
 from .user_mcp import (
+    collect_all_user_mcp_servers,
     collect_user_mcp_servers,
     cursor_user_mcp_enabled,
     plan_user_mcp,
@@ -106,6 +110,12 @@ def build_parser() -> argparse.ArgumentParser:
     mount.add_argument("--profile", metavar="NAME", help="profile to render (default: from config)")
     mount.add_argument("--agent", metavar="SLUG", help="agent slug to render")
     mount.add_argument(
+        "--profile-all",
+        dest="profile_all",
+        action="store_true",
+        help="render every declared profile and agent slug, each under its own identity label",
+    )
+    mount.add_argument(
         "--check",
         action="store_true",
         help="report what would change and exit non-zero, without writing",
@@ -179,6 +189,7 @@ def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
 
 
 PLAN_BUILDERS = {"cursor": plan_cursor, "opencode": plan_opencode}
+ALL_PLAN_BUILDERS = {"cursor": plan_cursor_all, "opencode": plan_opencode_all}
 # Hermes writes a profile home from `_emit_hermes`, not a project file.
 HOME_HOSTS = frozenset({"hermes"})
 
@@ -193,6 +204,20 @@ def mount_plans(root: Path, config, identity: Profile) -> list[Plan]:
             print(f"agentize: {host.name}: no renderer in this build, skipped", file=sys.stderr)
             continue
         plans.append(builder(root, config, identity))
+    return plans
+
+
+def mount_plans_all(root: Path, config, identities: tuple[Profile, ...]) -> list[Plan]:
+    """One plan per host holding every identity, so pruning sees the union."""
+    plans = [plan_agents_md_all(root, config, identities)]
+    for host in config.enabled_hosts():
+        if host.name in HOME_HOSTS:
+            continue
+        builder = ALL_PLAN_BUILDERS.get(host.name)
+        if builder is None:
+            print(f"agentize: {host.name}: no renderer in this build, skipped", file=sys.stderr)
+            continue
+        plans.append(builder(root, config, identities))
     return plans
 
 
@@ -223,7 +248,7 @@ def _print_plan(root: Path, plan: Plan, *, check: bool, prefix: str = "") -> int
 def _emit_cascade(
     rows: list,
     *,
-    identity: Profile,
+    who: str,
     check: bool,
 ) -> int:
     pending = 0
@@ -231,7 +256,7 @@ def _emit_cascade(
         for line in lines:
             print(f"  {line}")
         pending += len(lines) if check else 0
-        print(f"agentize: cascade {label} [{identity.name}] {plan.label}")
+        print(f"agentize: cascade {label} [{who}] {plan.label}")
     return pending
 
 
@@ -240,40 +265,61 @@ def cmd_mount(
     *,
     profile_name: str | None,
     agent_name: str | None,
+    profile_all: bool,
     check: bool,
 ) -> int:
+    if profile_all and (profile_name or agent_name):
+        raise ConfigError("pass --profile-all, or --profile/--agent, not both")
     policy = config_path(root)
     pending = 0
     last = load_last(root)
 
     if policy.is_file():
         config = load_config(policy)
-        identity = _select_identity(
-            config, profile_name=profile_name, agent_name=agent_name, last=last
-        )
-        for plan in mount_plans(root, config, identity):
-            pending += _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
-        pending += _emit_cascade(
-            cascade(root, config, identity, check=check),
-            identity=identity,
-            check=check,
-        )
-        pending += _emit_user_mcp(root, config, identity, check=check)
+        if profile_all:
+            identities = config.all_identities()
+            for plan in mount_plans_all(root, config, identities):
+                pending += _print_plan(root, plan, check=check, prefix="[all] ")
+            pending += _emit_cascade(
+                cascade_all(root, config, identities, check=check), who="all", check=check
+            )
+            pending += _emit_user_mcp_all(root, config, identities, check=check)
+        else:
+            identity = _select_identity(
+                config, profile_name=profile_name, agent_name=agent_name, last=last
+            )
+            for plan in mount_plans(root, config, identity):
+                pending += _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
+            pending += _emit_cascade(
+                cascade(root, config, identity, check=check),
+                who=identity.name,
+                check=check,
+            )
+            pending += _emit_user_mcp(root, config, identity, check=check)
         pending += _emit_hermes(root, config, check=check)
     else:
         parent = find_inherit_root(root)
         if parent is None:
             raise ConfigError(f"no configuration at {policy}")
         config = load_config(config_path(parent))
-        identity = _select_identity(
-            config, profile_name=profile_name, agent_name=agent_name, last=last
-        )
-        pending += _emit_cascade(
-            plant_child(parent, root, config, identity, check=check),
-            identity=identity,
-            check=check,
-        )
-        pending += _emit_user_mcp(parent, config, identity, check=check)
+        if profile_all:
+            identities = config.all_identities()
+            pending += _emit_cascade(
+                plant_child_all(parent, root, config, identities, check=check),
+                who="all",
+                check=check,
+            )
+            pending += _emit_user_mcp_all(parent, config, identities, check=check)
+        else:
+            identity = _select_identity(
+                config, profile_name=profile_name, agent_name=agent_name, last=last
+            )
+            pending += _emit_cascade(
+                plant_child(parent, root, config, identity, check=check),
+                who=identity.name,
+                check=check,
+            )
+            pending += _emit_user_mcp(parent, config, identity, check=check)
         pending += _emit_hermes(parent, config, check=check)
 
     if check and pending:
@@ -290,12 +336,21 @@ def _emit_user_mcp(root: Path, config, identity: Profile, *, check: bool) -> int
     return _print_plan(user_mcp_path().parent.parent, plan, check=check, prefix="[human] ")
 
 
+def _emit_user_mcp_all(root: Path, config, identities: tuple[Profile, ...], *, check: bool) -> int:
+    """The user file carries every identity, so its keys say which one they are."""
+    if not cursor_user_mcp_enabled(config):
+        return 0
+    wanted = collect_all_user_mcp_servers(root, config, identities)
+    plan = plan_user_mcp(wanted)
+    return _print_plan(user_mcp_path().parent.parent, plan, check=check, prefix="[all] ")
+
+
 def _emit_hermes(root: Path, config, *, check: bool) -> int:
     if not hermes.hermes_enabled(config):
         return 0
     pending = 0
     for who in hermes.hermes_identities(config):
-        plan = hermes.plan_mcp(root, config, who)
+        plan = hermes.plan(root, config, who)
         pending += _print_plan(
             root, plan, check=check, prefix=f"[{hermes.profile_dir_name(who)}] "
         )
@@ -319,7 +374,7 @@ def _mount_for_run(root: Path, config, identity: Profile) -> None:
             print(f"  {line}", file=sys.stderr)
     if hermes.hermes_enabled(config):
         for who in hermes.hermes_identities(config):
-            plan = hermes.plan_mcp(root, config, who)
+            plan = hermes.plan(root, config, who)
             for line in apply(plan.root or root, plan):
                 print(f"  {line}", file=sys.stderr)
             keep = hermes.profile_home(root, who)
@@ -435,6 +490,7 @@ def main(argv: list[str] | None = None) -> int:
                 root,
                 profile_name=args.profile,
                 agent_name=getattr(args, "agent", None),
+                profile_all=bool(getattr(args, "profile_all", False)),
                 check=args.check,
             )
         if args.command == "fetch":

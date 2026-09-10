@@ -13,7 +13,9 @@ bot next to the human. The default agent slug is labelled ``agent``, so
 
 ``mount`` plants every declared profile and agent slug, not only the
 current identity. Only keys prefixed ``agentize-`` are owned. Catalog
-entries and hand-edited servers stay. ``fetch`` does not download Hermes
+entries and hand-edited servers stay. Skills go into that same profile
+``skills/`` tree under the host ``emit_prefix`` (default ``auto.``), so
+bundled Hermes skills are not pruned. ``fetch`` does not download Hermes
 — it locates the machine install.
 """
 
@@ -27,14 +29,16 @@ from typing import Any
 
 import yaml
 
-from ..config import DEFAULT_AGENT, Config, McpServer, Profile
+from .. import skills
+from ..config import Config, McpServer, Profile, identity_label
 from ..errors import AgentizeError, MountError
-from ..mount import Plan, Write
+from ..mount import Plan, Write, plan_host_skills
 from ..user_mcp import PREFIX, collect_user_mcp_servers
 
 CONFIG_FILE = "config.yaml"
 MCP_KEY = "mcp_servers"
 PROFILES_DIR = "profiles"
+SKILLS_DIR = "skills"
 
 
 def _user_home() -> Path:
@@ -77,9 +81,7 @@ def hermes_enabled(config: Config) -> bool:
 
 
 def profile_dir_name(identity: Profile) -> str:
-    if identity.origin == "agent" and identity.name == DEFAULT_AGENT:
-        return f"{PREFIX}agent"
-    return f"{PREFIX}{identity.name}"
+    return f"{PREFIX}{identity_label(identity)}"
 
 
 def profile_home(project_root: Path, identity: Profile) -> Path:
@@ -88,23 +90,11 @@ def profile_home(project_root: Path, identity: Profile) -> Path:
 
 
 def hermes_identities(config: Config) -> tuple[Profile, ...]:
-    """Every profile and agent slug, unique by Desktop directory name."""
-    seen: set[str] = set()
-    out: list[Profile] = []
-    for identity in config.profiles.values():
-        key = profile_dir_name(identity)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(identity)
-    for slug in config.agents:
-        identity = config.resolve_agent(slug)
-        key = profile_dir_name(identity)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append(identity)
-    return tuple(out)
+    """Every profile and agent slug, unique by Desktop directory name.
+
+    The same set `mount --profile-all` renders for the other hosts.
+    """
+    return config.all_identities()
 
 
 def apply_root(project_root: Path, dest: Path) -> Path:
@@ -164,6 +154,11 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
+def skills_prefix(config: Config) -> str:
+    host = config.hosts.get("hermes")
+    return (host.emit_prefix if host else "") or skills.DEFAULT_PREFIX
+
+
 def plan_mcp(project_root: Path, config: Config, identity: Profile) -> Plan:
     wanted = collect_user_mcp_servers(project_root, config, identity)
     dest = profile_home(project_root, identity)
@@ -174,6 +169,28 @@ def plan_mcp(project_root: Path, config: Config, identity: Profile) -> Plan:
         label=f"hermes: {len(wanted)} {noun}",
         writes=(Write(target, rendered.encode("utf-8")),),
         root=apply_root(project_root, dest),
+    )
+
+
+def plan(project_root: Path, config: Config, identity: Profile) -> Plan:
+    """MCP servers and prefixed project skills for one Desktop identity."""
+    mcp = plan_mcp(project_root, config, identity)
+    dest = profile_home(project_root, identity) / SKILLS_DIR
+    skill_writes, skill_deletes, skill_count = plan_host_skills(
+        project_root,
+        config,
+        host="hermes",
+        identity=identity,
+        skills_dir=SKILLS_DIR,
+        prefix=skills_prefix(config),
+        dest=dest,
+    )
+    noun = "skill" if skill_count == 1 else "skills"
+    return Plan(
+        label=f"{mcp.label}, {skill_count} {noun}",
+        writes=(*mcp.writes, *skill_writes),
+        deletes=(*mcp.deletes, *skill_deletes),
+        root=mcp.root,
     )
 
 

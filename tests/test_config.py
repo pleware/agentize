@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agentize.config import ConfigError, load_config, parse_config
+from agentize.config import ConfigError, identity_label, load_config, parse_config
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -173,3 +173,83 @@ def test_wrong_types_are_reported_with_location():
 
     with pytest.raises(ConfigError, match=r"profiles\.agent\.mcp: expected a list of strings"):
         parse_config({"version": 1, "profiles": {"agent": {"mcp": "postgres"}}})
+
+
+def test_an_unknown_top_level_key_is_rejected():
+    with pytest.raises(ConfigError, match="soruce is not a known key"):
+        parse_config({"version": 1, "soruce": ".agents"})
+
+
+def test_a_typo_in_isolate_data_is_rejected_rather_than_ignored():
+    """The silent reading of `isolat_data` is the machine's own database."""
+    with pytest.raises(ConfigError, match=r"profiles\.php74\.isolat_data is not a known key"):
+        parse_config({"version": 1, "profiles": {"php74": {"isolat_data": True}}})
+
+
+def test_an_unknown_host_key_is_rejected():
+    with pytest.raises(ConfigError, match="hosts.cursor.emmit_prefix is not a known key"):
+        parse_config({"version": 1, "hosts": {"cursor": {"emmit_prefix": "auto."}}})
+
+
+def test_an_unknown_agent_key_is_rejected():
+    raw = {"version": 1, "agents": {"default": {"mcps": ["postgres"]}}}
+    with pytest.raises(ConfigError, match=r"agents\.default\.mcps is not a known key"):
+        parse_config(raw)
+
+
+def test_needs_is_not_a_profile_key():
+    """Only an agent slug installs a toolchain; `needs` on a human profile is a typo."""
+    with pytest.raises(ConfigError, match=r"profiles\.human\.needs is not a known key"):
+        parse_config({"version": 1, "profiles": {"human": {"needs": ["php@8.3"]}}})
+
+
+def test_an_unknown_mcp_server_key_is_rejected():
+    raw = {
+        "version": 1,
+        "mcp": {"servers": {"postgres": {"command": ["postgres-mcp"], "type": "stdio"}}},
+    }
+    with pytest.raises(ConfigError, match=r"mcp\.servers\.postgres\.type is not a known key"):
+        parse_config(raw)
+
+
+def test_an_unknown_section_key_is_rejected():
+    with pytest.raises(ConfigError, match="mcp.server is not a known key"):
+        parse_config({"version": 1, "mcp": {"server": {}}})
+
+
+def test_every_declared_identity_is_labelled_once():
+    config = parse_config(
+        {
+            "version": 1,
+            "profiles": {"human": {"default": True}},
+            "agents": {"default": {"mcp": []}, "php": {}},
+        }
+    )
+
+    assert [identity_label(item) for item in config.all_identities()] == [
+        "human",
+        "agent",
+        "php",
+    ]
+
+
+def test_a_profile_shadows_an_agent_slug_with_the_same_label():
+    """Profiles win the label, exactly as they win a name in `lookup_driver`."""
+    config = parse_config(
+        {
+            "version": 1,
+            "profiles": {"agent": {"default": True}},
+            "agents": {"default": {}},
+        }
+    )
+
+    identities = config.all_identities()
+
+    assert [identity_label(item) for item in identities] == ["agent"]
+    assert identities[0].origin == "profile"
+
+
+def test_the_default_agent_slug_is_labelled_agent():
+    config = parse_config({"version": 1, "agents": {"default": {}}})
+
+    assert identity_label(config.resolve_agent("default")) == "agent"

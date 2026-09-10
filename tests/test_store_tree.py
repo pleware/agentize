@@ -97,3 +97,17 @@ def test_init_fails_loudly_when_the_policy_would_be_ignored(repo: Path, capsys):
 def test_init_succeeds_in_a_clean_repo(repo: Path):
     assert main(["-C", str(repo), "init"]) == 0
     assert (data_dir(repo) / ".gitignore").is_file()
+
+
+def test_a_machine_without_git_is_not_hiding_the_policy(
+    repo: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """`init` is what a fresh machine runs first, so a missing git is not a crash."""
+
+    def no_git(*_args: object, **_kwargs: object) -> None:
+        raise FileNotFoundError(2, "No such file or directory: 'git'")
+
+    monkeypatch.setattr("agentize.store_tree.subprocess.run", no_git)
+
+    assert not config_is_ignored(repo)
+    assert main(["-C", str(repo), "init"]) == 0

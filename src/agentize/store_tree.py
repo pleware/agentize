@@ -80,10 +80,15 @@ def config_is_ignored(project_root: Path) -> bool:
 
     A deny-by-default repository ignores every root file it does not whitelist,
     so without `!/agentize.yaml` the policy silently never gets committed.
+    A machine with no git cannot be hiding it, and `init` is the first command
+    a fresh machine runs — so an absent git is a `False`, not a traceback.
     """
-    result = subprocess.run(
-        ["git", "check-ignore", "-q", "--", CONFIG_NAME],
-        cwd=project_root,
-        capture_output=True,
-    )
+    try:
+        result = subprocess.run(
+            ["git", "check-ignore", "-q", "--", CONFIG_NAME],
+            cwd=project_root,
+            capture_output=True,
+        )
+    except FileNotFoundError:
+        return False
     return result.returncode == 0

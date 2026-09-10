@@ -65,23 +65,33 @@ def generated_rule_bytes() -> bytes:
     return GENERATED_RULE_TEXT.encode("utf-8")
 
 
-def emit_name(key: str, prefix: str) -> str:
+def emit_name(key: str, prefix: str, qualifier: str | None = None) -> str:
+    """`core/style.mdc` → `auto.style.mdc`, or `auto.human.style.mdc`.
+
+    `qualifier` is the identity label, used when one directory holds every
+    declared identity's rules.
+    """
     base = PurePosixPath(key).name
     if base.lower().endswith(RULE_SUFFIX):
         base = base[: -len(RULE_SUFFIX)]
     if prefix and base.startswith(prefix):
         return f"{base}{RULE_SUFFIX}"
-    return f"{prefix}{base}{RULE_SUFFIX}"
+    stem = f"{qualifier}.{base}" if qualifier else base
+    return f"{prefix}{stem}{RULE_SUFFIX}"
 
 
-def plan_rules(resolved: Iterable[ResolvedFile], prefix: str) -> tuple[Emitted, ...]:
+def plan_rules(
+    resolved: Iterable[ResolvedFile], prefix: str, qualifier: str | None = None
+) -> tuple[Emitted, ...]:
     emitted: dict[str, Emitted] = {}
     for item in resolved:
         if not item.key.lower().endswith(RULE_SUFFIX):
             continue
-        name = emit_name(item.key, prefix)
+        name = emit_name(item.key, prefix, qualifier)
         clash = emitted.get(name)
         if clash is not None:
+            if clash.source == item.path:
+                continue
             raise MountError(
                 f"{clash.source} and {item.path} would both be written as {name}. "
                 "Cursor's rules directory is flat, so rule file names must be unique."

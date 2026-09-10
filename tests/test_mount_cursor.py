@@ -91,6 +91,15 @@ def test_emitted_names_are_sorted():
     )
 
 
+def test_a_qualifier_marks_the_identity():
+    assert emit_name("core/style.mdc", "auto.", "human") == "auto.human.style.mdc"
+
+    resolved = [ResolvedFile(key="style.mdc", path="shared/style.mdc", layer="shared")]
+    assert plan_rules(resolved, "auto.", "human") == (
+        Emitted("auto.human.style.mdc", "shared/style.mdc"),
+    )
+
+
 # --- mount end to end ---
 
 

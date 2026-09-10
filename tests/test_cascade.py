@@ -245,3 +245,25 @@ def test_empty_inherit_list_refuses(tmp_path: Path):
     spec = parse_config({"version": 1, "inherit": []})
     assert spec.inherit.refuse
     assert not spec.inherit.allows("mcp")
+
+
+def test_mount_check_writes_nothing(tmp_path: Path):
+    """`--check` is a CI gate: it reports what is stale and creates nothing.
+
+    The cascade used to prepare `.agentize/` in every child before it asked
+    whether anything had changed, so a check-only run left a directory behind.
+    """
+    ws = tmp_path / "ws"
+    erp = ws / "erp"
+    write(ws / "agentize.yaml", PARENT)
+    write(ws / ".agents" / "shared" / "style.mdc", "style\n")
+    erp.mkdir()
+    mani_projects(ws, erp="erp")
+
+    assert main(["-C", str(ws), "mount", "--check"]) == 1
+
+    assert not (ws / ".agentize").exists()
+    assert not (ws / ".cursor").exists()
+    assert not (ws / "AGENTS.md").exists()
+    assert not (erp / ".agentize").exists()
+    assert not (erp / ".cursor").exists()

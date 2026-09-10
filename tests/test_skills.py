@@ -7,7 +7,13 @@ import pytest
 from agentize.cli import main
 from agentize.errors import MountError
 from agentize.resolve import ResolvedFile
-from agentize.skills import plan_skills, skill_units, stale_dir_names, unknown_names
+from agentize.skills import (
+    plan_skills,
+    skill_resolve_map,
+    skill_units,
+    stale_dir_names,
+    unknown_names,
+)
 
 CONFIG = """\
 version: 1
@@ -51,6 +57,16 @@ def test_skill_units_finds_directories_holding_a_marker():
     assert skill_units(listing) == ("profiles/agent/skills/deploy", "shared/skills/review")
 
 
+def test_skillize_root_trees_compete_as_shared():
+    assert skill_resolve_map(("skills/review",)) == {"shared/skills/review": "skills/review"}
+
+
+def test_a_shared_copy_wins_the_disk_path():
+    assert skill_resolve_map(("skills/review", "shared/skills/review")) == {
+        "shared/skills/review": "shared/skills/review"
+    }
+
+
 def test_a_directory_without_the_marker_is_not_a_skill():
     assert skill_units(("shared/skills/review/notes.md",)) == ()
 
@@ -61,6 +77,13 @@ def test_the_prefix_is_applied_once():
 
     already = resolved(("skills/auto.review", "shared/skills/auto.review"))
     assert plan_skills(already, "auto.")[0].dir_name == "auto.review"
+
+
+def test_a_qualifier_marks_the_identity():
+    items = resolved(("skills/review", "shared/skills/review"))
+
+    assert plan_skills(items, "auto.", (), "human")[0].dir_name == "auto.human.review"
+    assert plan_skills(items, "auto.", (), "agent")[0].name == "review"
 
 
 def test_an_empty_selection_means_every_skill():
@@ -103,6 +126,27 @@ def test_a_whole_skill_directory_is_copied(project: Path):
     emitted = project / ".cursor/skills/auto.review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
     assert (emitted / "checklist.md").read_text(encoding="utf-8") == "one\n"
+
+
+def test_skillize_root_skills_are_copied(project: Path):
+    write(project / ".agents/skills/review/SKILL.md", "# review\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    assert (project / ".cursor/skills/auto.review/SKILL.md").read_text(
+        encoding="utf-8"
+    ) == "# review\n"
+
+
+def test_shared_layer_beats_a_skillize_root_skill(project: Path):
+    write(project / ".agents/skills/review/SKILL.md", "# skillize\n")
+    write(project / ".agents/shared/skills/review/SKILL.md", "# shared\n")
+
+    main(["-C", str(project), "mount"])
+
+    assert (project / ".cursor/skills/auto.review/SKILL.md").read_text(
+        encoding="utf-8"
+    ) == "# shared\n"
 
 
 def test_each_host_gets_its_own_copy(project: Path):

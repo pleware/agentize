@@ -20,7 +20,7 @@ from .cascade import (
     load_mani,
     overlay_config,
 )
-from .config import Config, McpServer, Profile
+from .config import Config, McpServer, Profile, identity_label
 from .hosts.cursor import MCP_KEY, mcp_entry
 from .mount import Plan, Write, _read_json
 
@@ -35,6 +35,16 @@ def prefixed_name(name: str) -> str:
     return name if name.startswith(PREFIX) else f"{PREFIX}{name}"
 
 
+def qualified_name(server_name: str, qualifier: str | None) -> str:
+    """`postgres` → `agentize-postgres`, or `agentize-human.postgres`.
+
+    The qualifier is the identity label, used when one user file carries every
+    declared identity at once.
+    """
+    stem = f"{qualifier}.{server_name}" if qualifier else server_name
+    return prefixed_name(stem)
+
+
 def cursor_user_mcp_enabled(config: Config) -> bool:
     host = config.hosts.get("cursor")
     return host is not None and host.enabled and host.user_mcp
@@ -45,12 +55,14 @@ def _add_prefixed(
     root: Path,
     config: Config,
     identity: Profile,
+    *,
+    qualifier: str | None = None,
 ) -> None:
     if not identity.mcp:
         return
     absolute = absolutize_servers(config, root)
     for server in absolute.servers_for(identity):
-        name = prefixed_name(server.name)
+        name = qualified_name(server.name, qualifier)
         wanted[name] = replace(server, name=name)
 
 
@@ -60,15 +72,21 @@ def collect_user_mcp_servers(
     identity: Profile,
     *,
     seen: set[Path] | None = None,
+    qualifier: str | None = None,
 ) -> dict[str, McpServer]:
-    """Union of this root plus every cascaded child that plants MCP."""
+    """Union of this root plus every cascaded child that plants MCP.
+
+    `qualifier` is the identity label: it distinguishes two identities' servers
+    in one user file. Hermes leaves it unset — its profile directory is already
+    per identity.
+    """
     visited = seen if seen is not None else set()
     here = root.resolve()
     if here in visited:
         return {}
     visited.add(here)
     wanted: dict[str, McpServer] = {}
-    _add_prefixed(wanted, root, config, identity)
+    _add_prefixed(wanted, root, config, identity, qualifier=qualifier)
     for child in child_dirs(root):
         child_config = load_child_config(child)
         merged = overlay_config(config, child_config) if child_config else config
@@ -78,9 +96,25 @@ def collect_user_mcp_servers(
         # shift a child's --directory, and an inherit-only leaf does not
         # double the path (…/orchestrator/orchestrator).
         if inherit_spec(child).allows("mcp") and child_config is not None:
-            _add_prefixed(wanted, child, merged, ident)
+            _add_prefixed(wanted, child, merged, ident, qualifier=qualifier)
         if load_mani(child) is not None:
-            wanted.update(collect_user_mcp_servers(child, merged, ident, seen=visited))
+            wanted.update(
+                collect_user_mcp_servers(child, merged, ident, seen=visited, qualifier=qualifier)
+            )
+    return wanted
+
+
+def collect_all_user_mcp_servers(
+    root: Path, config: Config, identities: tuple[Profile, ...]
+) -> dict[str, McpServer]:
+    """Every identity's servers in one map, keys qualified by identity label."""
+    wanted: dict[str, McpServer] = {}
+    for identity in identities:
+        wanted.update(
+            collect_user_mcp_servers(
+                root, config, identity, qualifier=identity_label(identity)
+            )
+        )
     return wanted
 
 

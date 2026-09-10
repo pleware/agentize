@@ -287,6 +287,145 @@ def test_drop_stale_named_profiles_leaves_the_chosen_root(tmp_path: Path, monkey
     assert not stale.exists()
 
 
+def test_hermes_copies_skillize_root_skills(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(project / "agentize.yaml", CONFIG)
+    write(project / ".agents" / "skills" / "review" / "SKILL.md", "# review\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "auto.review"
+    assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
+
+
+def test_hermes_copies_a_skill_into_the_profile_home(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(project / "agentize.yaml", CONFIG)
+    write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
+    write(project / ".agents" / "shared" / "skills" / "review" / "checklist.md", "one\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "auto.review"
+    assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
+    assert (emitted / "checklist.md").read_text(encoding="utf-8") == "one\n"
+    assert not (project / ".cursor" / "skills").exists()
+    assert not (project / ".agents" / "skills").exists()
+
+
+def test_hermes_host_layer_wins_the_whole_skill(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(project / "agentize.yaml", CONFIG)
+    write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# shared\n")
+    write(project / ".agents" / "shared" / "skills" / "review" / "extra.md", "helper\n")
+    write(project / ".agents" / "hosts" / "hermes" / "skills" / "review" / "SKILL.md", "# hermes\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "auto.review"
+    assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# hermes\n"
+    assert not (emitted / "extra.md").exists()
+
+
+def test_hermes_profile_selection_narrows_skills(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(
+        project / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n  hermes: {}\n"
+        "profiles:\n"
+        "  human:\n    default: true\n    mcp: [postgres]\n    skills: [review]\n"
+        "  agent:\n    isolate_data: true\n    mcp: [postgres]\n    skills: [review]\n"
+        "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
+    )
+    write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
+    write(project / ".agents" / "shared" / "skills" / "deploy" / "SKILL.md", "# deploy\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    human = home / "profiles" / f"{PREFIX}human" / "skills"
+    agent = home / "profiles" / f"{PREFIX}agent" / "skills"
+    assert (human / "auto.review" / "SKILL.md").is_file()
+    assert not (human / "auto.deploy").exists()
+    assert (agent / "auto.review" / "SKILL.md").is_file()
+    assert not (agent / "auto.deploy").exists()
+
+
+def test_a_hand_written_hermes_skill_survives(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(project / "agentize.yaml", CONFIG)
+    write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
+    mine = home / "profiles" / f"{PREFIX}human" / "skills" / "github"
+    write(mine / "SKILL.md", "# bundled\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    assert (mine / "SKILL.md").read_text(encoding="utf-8") == "# bundled\n"
+    assert (home / "profiles" / f"{PREFIX}human" / "skills" / "auto.review" / "SKILL.md").is_file()
+
+
+def test_removing_a_source_skill_deletes_the_prefixed_hermes_tree(
+    tmp_path: Path, monkeypatch
+):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(project / "agentize.yaml", CONFIG)
+    skill = project / ".agents" / "shared" / "skills" / "review"
+    write(skill / "SKILL.md", "# review\n")
+    assert main(["-C", str(project), "mount"]) == 0
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "auto.review"
+    assert emitted.is_dir()
+
+    (skill / "SKILL.md").unlink()
+    skill.rmdir()
+    assert main(["-C", str(project), "mount"]) == 0
+    assert not emitted.exists()
+
+
+def test_a_hermes_profile_asking_for_an_absent_skill_fails(tmp_path: Path, monkeypatch, capsys):
+    isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(
+        project / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n  hermes: {}\n"
+        "profiles:\n"
+        "  human:\n    default: true\n    mcp: [postgres]\n    skills: [review]\n"
+        "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
+    )
+    write(project / ".agents" / "shared" / "skills" / "deploy" / "SKILL.md", "# deploy\n")
+
+    assert main(["-C", str(project), "mount"]) == 1
+    assert "review" in capsys.readouterr().err
+
+
+def test_hermes_emit_prefix_names_the_skill_directory(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(
+        project / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n  hermes:\n    emit_prefix: auto.hz.\n"
+        "profiles:\n  human:\n    default: true\n    mcp: [postgres]\n"
+        "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
+    )
+    write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    skills_root = home / "profiles" / f"{PREFIX}human" / "skills"
+    assert (skills_root / "auto.hz.review" / "SKILL.md").is_file()
+    assert not (skills_root / "auto.review").exists()
+
+
 def test_strip_without_root_walks_every_existing_home(tmp_path: Path, monkeypatch):
     native = tmp_path / "AppData" / "Local" / "hermes"
     posix = tmp_path / "home" / ".hermes"

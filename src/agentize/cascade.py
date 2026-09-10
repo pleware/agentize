@@ -20,7 +20,7 @@ from .hosts import cursor
 from .ignite import IGNITE_TOML
 from .mani import child_dirs, lists_descendant, load_mani
 from .markers import bind_markers
-from .mount import Plan, Write, apply, changes, plan_cursor
+from .mount import Plan, Write, apply, changes, plan_cursor_all
 from .store_tree import DIR_NAME, ensure_data_dir
 
 PARENTS_FILE = f"{DIR_NAME}/parents.yaml"
@@ -226,17 +226,37 @@ def plan_inherited_mcp(
     parent_config: Config,
     parent_identity: Profile,
 ) -> Plan:
+    return _plan_inherited_mcp(parent_root, child, parent_config, (parent_identity,))
+
+
+def plan_inherited_mcp_all(
+    parent_root: Path,
+    child: Path,
+    parent_config: Config,
+    parent_identities: tuple[Profile, ...],
+) -> Plan:
+    """Inherited MCP for every identity, in one plan against the child's file."""
+    return _plan_inherited_mcp(parent_root, child, parent_config, tuple(parent_identities))
+
+
+def _plan_inherited_mcp(
+    parent_root: Path,
+    child: Path,
+    parent_config: Config,
+    parent_identities: tuple[Profile, ...],
+) -> Plan:
     child_config = load_child_config(child)
     merged = overlay_config(parent_config, child_config) if child_config else parent_config
-    identity = identity_for_child(parent_identity, child_config)
-    missing = [name for name in identity.mcp if name not in merged.servers]
-    if missing:
-        raise CascadeError(
-            f"{child}: profile {identity.name!r} references unknown server "
-            f"{missing[0]!r} after cascade merge"
-        )
+    identities = tuple(identity_for_child(item, child_config) for item in parent_identities)
+    for identity in identities:
+        missing = [name for name in identity.mcp if name not in merged.servers]
+        if missing:
+            raise CascadeError(
+                f"{child}: profile {identity.name!r} references unknown server "
+                f"{missing[0]!r} after cascade merge"
+            )
     rebased = rebase_servers(merged, parent_root, child)
-    return plan_cursor(child, rebased, identity, include=frozenset({"mcp"}))
+    return plan_cursor_all(child, rebased, identities, include=frozenset({"mcp"}))
 
 
 def apply_or_check(root: Path, plan: Plan, *, check: bool) -> tuple[str, ...]:
@@ -251,20 +271,45 @@ def plant_child(
     *,
     check: bool,
 ) -> list[tuple[str, Plan, tuple[str, ...]]]:
+    return _plant_child(parent_root, child, parent_config, (parent_identity,), check=check)
+
+
+def plant_child_all(
+    parent_root: Path,
+    child: Path,
+    parent_config: Config,
+    parent_identities: tuple[Profile, ...],
+    *,
+    check: bool,
+) -> list[tuple[str, Plan, tuple[str, ...]]]:
+    """Plant inherited MCP, the leave-alone rule and observed parents, for all."""
+    return _plant_child(parent_root, child, parent_config, tuple(parent_identities), check=check)
+
+
+def _plant_child(
+    parent_root: Path,
+    child: Path,
+    parent_config: Config,
+    parent_identities: tuple[Profile, ...],
+    *,
+    check: bool,
+) -> list[tuple[str, Plan, tuple[str, ...]]]:
     """Plant inherited MCP, the leave-alone rule, and observed parents.
 
     Skip MCP when inherit refuses. The generated Cursor rule still lands so
     agents do not patch `auto.*` files in a child that has none of its own.
+    `check` reports without writing, which includes not creating `.agentize/`.
     """
     results: list[tuple[str, Plan, tuple[str, ...]]] = []
     spec = inherit_spec(child)
     label = posix_rel(child, parent_root)
     child_config = load_child_config(child)
-    identity = identity_for_child(parent_identity, child_config)
-    if spec.allows("mcp") and identity.mcp:
-        mcp_plan = plan_inherited_mcp(parent_root, child, parent_config, parent_identity)
+    identities = tuple(identity_for_child(item, child_config) for item in parent_identities)
+    if spec.allows("mcp") and any(identity.mcp for identity in identities):
+        mcp_plan = _plan_inherited_mcp(parent_root, child, parent_config, parent_identities)
         results.append((label, mcp_plan, apply_or_check(child, mcp_plan, check=check)))
-    ensure_data_dir(child)
+    if not check:
+        ensure_data_dir(child)
     rule_plan = plan_generated_rule(child)
     results.append((label, rule_plan, apply_or_check(child, rule_plan, check=check)))
     parents_plan = plan_parents_file(child)
@@ -280,6 +325,31 @@ def cascade(
     check: bool,
     seen: set[Path] | None = None,
 ) -> list[tuple[str, Plan, tuple[str, ...]]]:
+    return _cascade(parent_root, parent_config, (parent_identity,), check=check, seen=seen)
+
+
+def cascade_all(
+    parent_root: Path,
+    parent_config: Config,
+    parent_identities: tuple[Profile, ...],
+    *,
+    check: bool,
+    seen: set[Path] | None = None,
+) -> list[tuple[str, Plan, tuple[str, ...]]]:
+    """Walk every child for every declared identity."""
+    return _cascade(
+        parent_root, parent_config, tuple(parent_identities), check=check, seen=seen
+    )
+
+
+def _cascade(
+    parent_root: Path,
+    parent_config: Config,
+    parent_identities: tuple[Profile, ...],
+    *,
+    check: bool,
+    seen: set[Path] | None = None,
+) -> list[tuple[str, Plan, tuple[str, ...]]]:
     """Rebuild every existing child of this registry, then their registries."""
     visited = seen if seen is not None else set()
     here = parent_root.resolve()
@@ -288,12 +358,16 @@ def cascade(
     visited.add(here)
     out: list[tuple[str, Plan, tuple[str, ...]]] = []
     for child in child_dirs(parent_root):
-        out.extend(plant_child(parent_root, child, parent_config, parent_identity, check=check))
+        out.extend(
+            _plant_child(parent_root, child, parent_config, parent_identities, check=check)
+        )
         child_config = load_child_config(child)
         next_config = overlay_config(parent_config, child_config) if child_config else parent_config
-        next_identity = identity_for_child(parent_identity, child_config)
+        next_identities = tuple(
+            identity_for_child(item, child_config) for item in parent_identities
+        )
         if load_mani(child) is not None:
             out.extend(
-                cascade(child, next_config, next_identity, check=check, seen=visited)
+                _cascade(child, next_config, next_identities, check=check, seen=visited)
             )
     return out
