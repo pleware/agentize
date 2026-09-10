@@ -20,7 +20,7 @@ version: 1
 source: .agents
 hosts:
   cursor:
-    emit_prefix: auto.
+    emit_prefix: agentize.auto.generated.
   opencode: {}
 profiles:
   human:
@@ -73,17 +73,28 @@ def test_a_directory_without_the_marker_is_not_a_skill():
 
 def test_the_prefix_is_applied_once():
     items = resolved(("skills/review", "shared/skills/review"))
-    assert plan_skills(items, "auto.")[0].dir_name == "auto.review"
+    assert (
+        plan_skills(items, "agentize.auto.generated.")[0].dir_name
+        == "agentize.auto.generated.review"
+    )
 
-    already = resolved(("skills/auto.review", "shared/skills/auto.review"))
-    assert plan_skills(already, "auto.")[0].dir_name == "auto.review"
+    already = resolved(
+        ("skills/agentize.auto.generated.review", "shared/skills/agentize.auto.generated.review")
+    )
+    assert (
+        plan_skills(already, "agentize.auto.generated.")[0].dir_name
+        == "agentize.auto.generated.review"
+    )
 
 
 def test_a_qualifier_marks_the_identity():
     items = resolved(("skills/review", "shared/skills/review"))
 
-    assert plan_skills(items, "auto.", (), "human")[0].dir_name == "auto.human.review"
-    assert plan_skills(items, "auto.", (), "agent")[0].name == "review"
+    assert (
+        plan_skills(items, "agentize.auto.generated.", (), "human")[0].dir_name
+        == "agentize.auto.generated.human.review"
+    )
+    assert plan_skills(items, "agentize.auto.generated.", (), "agent")[0].name == "review"
 
 
 def test_an_empty_selection_means_every_skill():
@@ -91,7 +102,10 @@ def test_an_empty_selection_means_every_skill():
         ("skills/review", "shared/skills/review"),
         ("skills/deploy", "shared/skills/deploy"),
     )
-    assert [item.name for item in plan_skills(items, "auto.")] == ["deploy", "review"]
+    assert [item.name for item in plan_skills(items, "agentize.auto.generated.")] == [
+        "deploy",
+        "review",
+    ]
 
 
 def test_a_profile_selection_narrows_the_set():
@@ -99,12 +113,14 @@ def test_a_profile_selection_narrows_the_set():
         ("skills/review", "shared/skills/review"),
         ("skills/deploy", "shared/skills/deploy"),
     )
-    assert [item.name for item in plan_skills(items, "auto.", ["review"])] == ["review"]
+    assert [item.name for item in plan_skills(items, "agentize.auto.generated.", ["review"])] == [
+        "review"
+    ]
 
 
 def test_a_rule_is_not_mistaken_for_a_skill():
     items = resolved(("core/style.mdc", "shared/core/style.mdc"))
-    assert plan_skills(items, "auto.") == ()
+    assert plan_skills(items, "agentize.auto.generated.") == ()
 
 
 def test_an_unknown_selected_name_is_reported():
@@ -113,8 +129,10 @@ def test_an_unknown_selected_name_is_reported():
 
 
 def test_stale_directories_ignore_hand_written_ones():
-    existing = ("auto.review", "auto.deploy", "mine")
-    assert stale_dir_names(existing, ["auto.review"], "auto.") == ("auto.deploy",)
+    existing = ("agentize.auto.generated.review", "agentize.auto.generated.deploy", "mine")
+    assert stale_dir_names(
+        existing, ["agentize.auto.generated.review"], "agentize.auto.generated."
+    ) == ("agentize.auto.generated.deploy",)
 
 
 def test_a_whole_skill_directory_is_copied(project: Path):
@@ -123,7 +141,7 @@ def test_a_whole_skill_directory_is_copied(project: Path):
 
     assert main(["-C", str(project), "mount"]) == 0
 
-    emitted = project / ".cursor/skills/auto.review"
+    emitted = project / ".cursor/skills/agentize.auto.generated.review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
     assert (emitted / "checklist.md").read_text(encoding="utf-8") == "one\n"
 
@@ -133,7 +151,7 @@ def test_skillize_root_skills_are_copied(project: Path):
 
     assert main(["-C", str(project), "mount"]) == 0
 
-    assert (project / ".cursor/skills/auto.review/SKILL.md").read_text(
+    assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").read_text(
         encoding="utf-8"
     ) == "# review\n"
 
@@ -144,7 +162,7 @@ def test_shared_layer_beats_a_skillize_root_skill(project: Path):
 
     main(["-C", str(project), "mount"])
 
-    assert (project / ".cursor/skills/auto.review/SKILL.md").read_text(
+    assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").read_text(
         encoding="utf-8"
     ) == "# shared\n"
 
@@ -154,8 +172,8 @@ def test_each_host_gets_its_own_copy(project: Path):
 
     main(["-C", str(project), "mount"])
 
-    assert (project / ".cursor/skills/auto.review/SKILL.md").is_file()
-    assert (project / ".opencode/skills/auto.review/SKILL.md").is_file()
+    assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").is_file()
+    assert (project / ".opencode/skills/agentize.auto.generated.review/SKILL.md").is_file()
 
 
 def test_skills_never_land_in_a_shared_directory(project: Path):
@@ -174,7 +192,7 @@ def test_the_profile_layer_wins_whole(project: Path):
 
     main(["-C", str(project), "mount", "--profile", "agent"])
 
-    emitted = project / ".cursor/skills/auto.review"
+    emitted = project / ".cursor/skills/agentize.auto.generated.review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# agent\n"
     assert not (emitted / "extra.md").exists()
 
@@ -185,21 +203,21 @@ def test_a_profile_selection_excludes_the_rest(project: Path):
 
     main(["-C", str(project), "mount", "--profile", "agent"])
 
-    assert (project / ".cursor/skills/auto.review").is_dir()
-    assert not (project / ".cursor/skills/auto.deploy").exists()
+    assert (project / ".cursor/skills/agentize.auto.generated.review").is_dir()
+    assert not (project / ".cursor/skills/agentize.auto.generated.deploy").exists()
 
 
 def test_removing_a_source_skill_deletes_the_emitted_tree(project: Path):
     skill = project / ".agents/shared/skills/review"
     write(skill / "SKILL.md", "# review\n")
     main(["-C", str(project), "mount"])
-    assert (project / ".cursor/skills/auto.review").is_dir()
+    assert (project / ".cursor/skills/agentize.auto.generated.review").is_dir()
 
     (skill / "SKILL.md").unlink()
     skill.rmdir()
     main(["-C", str(project), "mount"])
 
-    assert not (project / ".cursor/skills/auto.review").exists()
+    assert not (project / ".cursor/skills/agentize.auto.generated.review").exists()
 
 
 def test_a_file_dropped_from_a_live_skill_is_removed(project: Path):
@@ -211,8 +229,8 @@ def test_a_file_dropped_from_a_live_skill_is_removed(project: Path):
     (skill / "checklist.md").unlink()
     main(["-C", str(project), "mount"])
 
-    assert (project / ".cursor/skills/auto.review/SKILL.md").is_file()
-    assert not (project / ".cursor/skills/auto.review/checklist.md").exists()
+    assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").is_file()
+    assert not (project / ".cursor/skills/agentize.auto.generated.review/checklist.md").exists()
 
 
 def test_a_hand_written_skill_survives(project: Path):
@@ -229,7 +247,7 @@ def test_a_second_mount_touches_nothing(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
     main(["-C", str(project), "mount"])
 
-    emitted = project / ".cursor/skills/auto.review/SKILL.md"
+    emitted = project / ".cursor/skills/agentize.auto.generated.review/SKILL.md"
     before = emitted.stat().st_mtime_ns
 
     assert main(["-C", str(project), "mount"]) == 0
@@ -253,7 +271,7 @@ def test_a_profile_asking_for_an_absent_skill_fails(project: Path, capsys):
 def test_two_layers_cannot_collide_after_prefixing():
     items = resolved(
         ("skills/review", "shared/skills/review"),
-        ("skills/auto.review", "shared/skills/auto.review"),
+        ("skills/agentize.auto.generated.review", "shared/skills/agentize.auto.generated.review"),
     )
     with pytest.raises(MountError, match="would both be written"):
-        plan_skills(items, "auto.")
+        plan_skills(items, "agentize.auto.generated.")

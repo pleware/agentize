@@ -19,30 +19,31 @@ from ..resolve import ResolvedFile
 
 RULES_DIR = ".cursor/rules"
 RULE_SUFFIX = ".mdc"
-DEFAULT_PREFIX = "auto."
-# Always this filename, even when emit_prefix is longer than `auto.`
-# (for example `auto.mt.`). Pruning still keys off emit_prefix, so a
+DEFAULT_PREFIX = "agentize.auto.generated."
+# Always this filename, even when emit_prefix is longer than `agentize.auto.generated.`
+# (for example `agentize.auto.generated.mt.`). Pruning still keys off emit_prefix, so a
 # longer prefix will not delete this file.
 GENERATED_RULE_STEM = "do-not-edit"
 GENERATED_RULE_NAME = f"{DEFAULT_PREFIX}{GENERATED_RULE_STEM}{RULE_SUFFIX}"
 GENERATED_RULE_TEXT = """\
 ---
-description: Do not edit agentize-generated Cursor rules (auto.* filenames).
-globs: .cursor/rules/auto*
+description: Do not edit agentize-generated Cursor rules (agentize.auto.generated.* filenames).
+globs: .cursor/rules/agentize.auto.generated*
 alwaysApply: true
 ---
 
 # Generated Cursor rules
 
 Do not edit, move, or delete files in `.cursor/rules/` whose names start
-with `auto.` — including `auto.mt.`. `agentize mount` writes them from the
-`source:` tree in `agentize.yaml` (usually `.agents/`).
+with `agentize.auto.generated.` — including `agentize.auto.generated.mt.`.
+`agentize mount` writes them from the `source:` tree in `agentize.yaml`
+(usually `.agents/`).
 
 To change a generated rule, edit the source file, then run
 `agentize mount`. Do not patch the emitted copy.
 
-The same prefix marks skills agentize copies into `.cursor/skills/` and
-`.opencode/skills/`. Leave those directories alone too.
+Agentize also copies skills into `.cursor/skills/` and `.opencode/skills/`
+(prefixed `auto.`). Leave those directories alone too.
 """
 
 SKILLS_DIR = ".cursor/skills"
@@ -66,7 +67,8 @@ def generated_rule_bytes() -> bytes:
 
 
 def emit_name(key: str, prefix: str, qualifier: str | None = None) -> str:
-    """`core/style.mdc` → `auto.style.mdc`, or `auto.human.style.mdc`.
+    """`core/style.mdc` → `agentize.auto.generated.style.mdc`,
+    or `agentize.auto.generated.human.style.mdc`.
 
     `qualifier` is the identity label, used when one directory holds every
     declared identity's rules.

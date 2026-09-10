@@ -2,7 +2,7 @@
 
 `mount` at a registry always cascades. A child without `agentize.yaml` still
 inherits (opt-out is `inherit: []` / `inherit: false`). Cascade writes
-`.cursor/mcp.json`, `.cursor/rules/auto.do-not-edit.mdc`, and
+`.cursor/mcp.json`, `.cursor/rules/agentize.auto.generated.do-not-edit.mdc`, and
 `.agentize/parents.yaml` — never `AGENTS.md`.
 """
 
@@ -97,9 +97,7 @@ def rebase_servers(config: Config, from_root: Path, to_root: Path) -> Config:
     servers = {
         name: replace(
             server,
-            command=rebase_command(
-                server.command, command_root(server, from_root), to_root
-            ),
+            command=rebase_command(server.command, command_root(server, from_root), to_root),
         )
         for name, server in config.servers.items()
     }
@@ -142,9 +140,7 @@ def identity_for_child(parent_identity: Profile, child: Config | None) -> Profil
 
 def parents_yaml(child: Path, parents: tuple[ObservedParent, ...]) -> str:
     payload = {
-        "parents": [
-            {"rel": posix_rel(item.root, child), "kind": item.kind} for item in parents
-        ]
+        "parents": [{"rel": posix_rel(item.root, child), "kind": item.kind} for item in parents]
     }
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=False)
 
@@ -265,7 +261,7 @@ def _plant_child(
     """Plant inherited MCP, the leave-alone rule, and observed parents.
 
     Skip MCP when inherit refuses. The generated Cursor rule still lands so
-    agents do not patch `auto.*` files in a child that has none of its own.
+    agents do not patch `agentize.auto.generated.*` files in a child that has none of its own.
     `check` reports without writing, which includes not creating `.agentize/`.
     """
     results: list[tuple[str, Plan, tuple[str, ...]]] = []
@@ -307,9 +303,7 @@ def cascade_all(
     seen: set[Path] | None = None,
 ) -> list[tuple[str, Plan, tuple[str, ...]]]:
     """Walk every child for every declared identity."""
-    return _cascade(
-        parent_root, parent_config, tuple(parent_identities), check=check, seen=seen
-    )
+    return _cascade(parent_root, parent_config, tuple(parent_identities), check=check, seen=seen)
 
 
 def _cascade(
@@ -328,16 +322,12 @@ def _cascade(
     visited.add(here)
     out: list[tuple[str, Plan, tuple[str, ...]]] = []
     for child in child_dirs(parent_root):
-        out.extend(
-            _plant_child(parent_root, child, parent_config, parent_identities, check=check)
-        )
+        out.extend(_plant_child(parent_root, child, parent_config, parent_identities, check=check))
         child_config = load_child_config(child)
         next_config = overlay_config(parent_config, child_config) if child_config else parent_config
         next_identities = tuple(
             identity_for_child(item, child_config) for item in parent_identities
         )
         if load_mani(child) is not None:
-            out.extend(
-                _cascade(child, next_config, next_identities, check=check, seen=visited)
-            )
+            out.extend(_cascade(child, next_config, next_identities, check=check, seen=visited))
     return out

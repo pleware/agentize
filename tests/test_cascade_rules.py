@@ -42,8 +42,8 @@ def test_a_binder_rule_descends_into_every_child(tmp_path: Path):
 
     assert main(["-C", str(ws), "mount"]) == 0
 
-    assert "auto.git-index-flags.mdc" in rule_names(ws)
-    assert "auto.git-index-flags.mdc" in rule_names(child)
+    assert "agentize.auto.generated.git-index-flags.mdc" in rule_names(ws)
+    assert "agentize.auto.generated.git-index-flags.mdc" in rule_names(child)
 
 
 def test_the_nearest_owner_wins_on_a_filename(tmp_path: Path):
@@ -58,12 +58,12 @@ def test_the_nearest_owner_wins_on_a_filename(tmp_path: Path):
 
     assert main(["-C", str(ws), "mount"]) == 0
 
-    assert (
-        ws / ".cursor" / "rules" / "auto.git-index-flags.mdc"
-    ).read_text(encoding="utf-8") == "parent rule\n"
-    assert (
-        child / ".cursor" / "rules" / "auto.git-index-flags.mdc"
-    ).read_text(encoding="utf-8") == "child rule\n"
+    assert (ws / ".cursor" / "rules" / "agentize.auto.generated.git-index-flags.mdc").read_text(
+        encoding="utf-8"
+    ) == "parent rule\n"
+    assert (child / ".cursor" / "rules" / "agentize.auto.generated.git-index-flags.mdc").read_text(
+        encoding="utf-8"
+    ) == "child rule\n"
 
 
 def test_a_child_mount_keeps_the_inherited_rule(tmp_path: Path):
@@ -81,7 +81,7 @@ def test_a_child_mount_keeps_the_inherited_rule(tmp_path: Path):
     # A child's own mount re-derives the rule from its ancestors and keeps it,
     # rather than pruning it as stale.
     assert main(["-C", str(child), "mount"]) == 0
-    assert "auto.git-index-flags.mdc" in rule_names(child)
+    assert "agentize.auto.generated.git-index-flags.mdc" in rule_names(child)
 
 
 def test_mount_check_with_cascade_rules_still_writes_nothing(tmp_path: Path):

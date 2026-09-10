@@ -14,7 +14,7 @@ bot next to the human. The default agent slug is labelled ``agent``, so
 ``mount`` plants every declared profile and agent slug, not only the
 current identity. Only keys prefixed ``agentize-`` are owned. Catalog
 entries and hand-edited servers stay. Skills go into that same profile
-``skills/`` tree under the host ``emit_prefix`` (default ``auto.``), so
+``skills/`` tree under the host ``emit_prefix`` (default ``agentize.auto.generated.``), so
 bundled Hermes skills are not pruned. ``fetch`` does not download Hermes
 — it locates the machine install.
 """

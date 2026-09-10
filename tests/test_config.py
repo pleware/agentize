@@ -25,7 +25,7 @@ def test_readme_example_parses_fully():
 
     assert config.source == Path(".agents")
     assert set(config.hosts) == {"cursor", "opencode", "hermes", "claude", "codex"}
-    assert config.hosts["cursor"].emit_prefix == "auto."
+    assert config.hosts["cursor"].emit_prefix == "agentize.auto.generated."
     assert config.hosts["cursor"].pin == "latest"
     assert not config.hosts["cursor"].default
     assert config.hosts["opencode"].default
@@ -188,7 +188,9 @@ def test_a_typo_in_isolate_data_is_rejected_rather_than_ignored():
 
 def test_an_unknown_host_key_is_rejected():
     with pytest.raises(ConfigError, match="hosts.cursor.emmit_prefix is not a known key"):
-        parse_config({"version": 1, "hosts": {"cursor": {"emmit_prefix": "auto."}}})
+        parse_config(
+            {"version": 1, "hosts": {"cursor": {"emmit_prefix": "agentize.auto.generated."}}}
+        )
 
 
 def test_an_unknown_agent_key_is_rejected():

@@ -22,7 +22,7 @@ version: 1
 source: .agents
 hosts:
   cursor:
-    emit_prefix: auto.
+    emit_prefix: agentize.auto.generated.
 profiles:
   human:
     default: true
@@ -116,9 +116,7 @@ def test_inherit_only_grandchild_does_not_double_directory(tmp_path: Path):
     )
     config = parse_config(yaml.safe_load(PARENT))
     wanted = collect_user_mcp_servers(parent, config, config.default_profile)
-    assert Path(wanted["agentize-orchestrator"].command[3]) == (
-        parent / "family/orch"
-    ).resolve()
+    assert Path(wanted["agentize-orchestrator"].command[3]) == (parent / "family/orch").resolve()
 
 
 def test_plan_and_strip_roundtrip(tmp_path: Path):

@@ -72,11 +72,11 @@ def test_every_identity_gets_its_own_rule_files(project: Path):
     assert main(["-C", str(project), "mount", "--profile-all"]) == 0
 
     assert names(project / ".cursor" / "rules") == [
-        "auto.agent.style.mdc",
-        "auto.do-not-edit.mdc",
-        "auto.human.style.mdc",
-        "auto.php.php-only.mdc",
-        "auto.php.style.mdc",
+        "agentize.auto.generated.agent.style.mdc",
+        "agentize.auto.generated.do-not-edit.mdc",
+        "agentize.auto.generated.human.style.mdc",
+        "agentize.auto.generated.php.php-only.mdc",
+        "agentize.auto.generated.php.style.mdc",
     ]
 
 
@@ -84,14 +84,14 @@ def test_skills_land_in_per_identity_directories(project: Path):
     main(["-C", str(project), "mount", "--profile-all"])
 
     assert names(project / ".cursor" / "skills") == [
-        "auto.agent.review",
-        "auto.human.review",
-        "auto.php.review",
+        "agentize.auto.generated.agent.review",
+        "agentize.auto.generated.human.review",
+        "agentize.auto.generated.php.review",
     ]
     assert names(project / ".opencode" / "skills") == [
-        "auto.agent.review",
-        "auto.human.review",
-        "auto.php.review",
+        "agentize.auto.generated.agent.review",
+        "agentize.auto.generated.human.review",
+        "agentize.auto.generated.php.review",
     ]
 
 
@@ -123,8 +123,11 @@ def test_one_identity_prunes_the_qualified_files(project: Path):
 
     assert main(["-C", str(project), "mount", "--profile", "human"]) == 0
 
-    assert names(project / ".cursor" / "rules") == ["auto.do-not-edit.mdc", "auto.style.mdc"]
-    assert names(project / ".cursor" / "skills") == ["auto.review"]
+    assert names(project / ".cursor" / "rules") == [
+        "agentize.auto.generated.do-not-edit.mdc",
+        "agentize.auto.generated.style.mdc",
+    ]
+    assert names(project / ".cursor" / "skills") == ["agentize.auto.generated.review"]
     assert mcp_keys(project) == ["pg"]
 
 

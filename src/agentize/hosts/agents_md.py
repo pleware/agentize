@@ -19,12 +19,12 @@ NOTE = "<!-- Managed by agentize. Edits between these markers are overwritten. -
 RULE_SUFFIX = ".mdc"
 HEADING = "## Project rules"
 GENERATED = (
-    "Do not edit `.cursor/rules/` files whose names start with `auto.` "
-    "(including `auto.mt.`) — they are written by `agentize mount`."
+    "Do not edit `.cursor/rules/` files whose names start with `agentize.auto.generated.` "
+    "(including `agentize.auto.generated.mt.`) — they are written by `agentize mount`."
 )
 QUALIFIED_NOTE = (
     "`agentize mount --profile-all` writes one file per identity: "
-    "`auto.<identity>.<name>.mdc`."
+    "`agentize.auto.generated.<identity>.<name>.mdc`."
 )
 
 
@@ -47,13 +47,11 @@ def render_block(resolved: Iterable[ResolvedFile], source: Path) -> str:
     return "\n".join(lines)
 
 
-def render_block_all(
-    groups: Iterable[tuple[str, tuple[ResolvedFile, ...]]], source: Path
-) -> str:
+def render_block_all(groups: Iterable[tuple[str, tuple[ResolvedFile, ...]]], source: Path) -> str:
     """One section per identity, so two identities' rule sets stay readable.
 
     The listed path is always the source; the emitted file is
-    `auto.<identity>.<name>.mdc` in `.cursor/rules/`.
+    `agentize.auto.generated.<identity>.<name>.mdc` in `.cursor/rules/`.
     """
     sections = list(groups)
     lines = [BEGIN, NOTE, "", HEADING, "", GENERATED]

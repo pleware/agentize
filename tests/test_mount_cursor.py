@@ -20,7 +20,7 @@ version: 1
 source: .agents
 hosts:
   cursor:
-    emit_prefix: auto.
+    emit_prefix: agentize.auto.generated.
 profiles:
   human:
     default: true
@@ -54,16 +54,22 @@ def emitted(project: Path) -> list[str]:
 
 
 def test_emit_name_flattens_and_prefixes():
-    assert emit_name("core/style.mdc", "auto.") == "auto.style.mdc"
+    assert (
+        emit_name("core/style.mdc", "agentize.auto.generated.")
+        == "agentize.auto.generated.style.mdc"
+    )
 
 
 def test_emit_name_does_not_double_the_prefix():
-    assert emit_name("core/auto.style.mdc", "auto.") == "auto.style.mdc"
+    assert (
+        emit_name("core/agentize.auto.generated.style.mdc", "agentize.auto.generated.")
+        == "agentize.auto.generated.style.mdc"
+    )
 
 
 def test_non_rule_files_are_not_emitted():
     resolved = [ResolvedFile(key="notes.md", path="shared/notes.md", layer="shared")]
-    assert plan_rules(resolved, "auto.") == ()
+    assert plan_rules(resolved, "agentize.auto.generated.") == ()
 
 
 def test_flattening_collision_is_an_error_not_a_silent_overwrite():
@@ -71,13 +77,21 @@ def test_flattening_collision_is_an_error_not_a_silent_overwrite():
         ResolvedFile(key="php/style.mdc", path="shared/php/style.mdc", layer="shared"),
         ResolvedFile(key="shell/style.mdc", path="shared/shell/style.mdc", layer="shared"),
     ]
-    with pytest.raises(MountError, match="would both be written as auto.style.mdc"):
-        plan_rules(resolved, "auto.")
+    with pytest.raises(
+        MountError, match="would both be written as agentize.auto.generated.style.mdc"
+    ):
+        plan_rules(resolved, "agentize.auto.generated.")
 
 
 def test_only_prefixed_files_are_ever_stale():
-    existing = ["auto.gone.mdc", "auto.kept.mdc", "handwritten.mdc"]
-    assert stale_names(existing, ["auto.kept.mdc"], "auto.") == ("auto.gone.mdc",)
+    existing = [
+        "agentize.auto.generated.gone.mdc",
+        "agentize.auto.generated.kept.mdc",
+        "handwritten.mdc",
+    ]
+    assert stale_names(
+        existing, ["agentize.auto.generated.kept.mdc"], "agentize.auto.generated."
+    ) == ("agentize.auto.generated.gone.mdc",)
 
 
 def test_emitted_names_are_sorted():
@@ -85,18 +99,21 @@ def test_emitted_names_are_sorted():
         ResolvedFile(key="z.mdc", path="shared/z.mdc", layer="shared"),
         ResolvedFile(key="a.mdc", path="shared/a.mdc", layer="shared"),
     ]
-    assert plan_rules(resolved, "auto.") == (
-        Emitted("auto.a.mdc", "shared/a.mdc"),
-        Emitted("auto.z.mdc", "shared/z.mdc"),
+    assert plan_rules(resolved, "agentize.auto.generated.") == (
+        Emitted("agentize.auto.generated.a.mdc", "shared/a.mdc"),
+        Emitted("agentize.auto.generated.z.mdc", "shared/z.mdc"),
     )
 
 
 def test_a_qualifier_marks_the_identity():
-    assert emit_name("core/style.mdc", "auto.", "human") == "auto.human.style.mdc"
+    assert (
+        emit_name("core/style.mdc", "agentize.auto.generated.", "human")
+        == "agentize.auto.generated.human.style.mdc"
+    )
 
     resolved = [ResolvedFile(key="style.mdc", path="shared/style.mdc", layer="shared")]
-    assert plan_rules(resolved, "auto.", "human") == (
-        Emitted("auto.human.style.mdc", "shared/style.mdc"),
+    assert plan_rules(resolved, "agentize.auto.generated.", "human") == (
+        Emitted("agentize.auto.generated.human.style.mdc", "shared/style.mdc"),
     )
 
 
@@ -109,7 +126,7 @@ def test_mount_writes_generated_leave_alone_rule(project: Path):
     assert path.is_file()
     text = path.read_text(encoding="utf-8")
     assert "alwaysApply: true" in text
-    assert "auto." in text
+    assert "agentize.auto.generated." in text
     assert "agentize mount" in text
 
 
@@ -121,8 +138,10 @@ def test_source_rule_cannot_use_the_generated_name(project: Path, capsys):
 
 def test_mount_writes_prefixed_rules(project: Path):
     assert main(["-C", str(project), "mount"]) == 0
-    assert set(emitted(project)) == {GENERATED_RULE_NAME, "auto.style.mdc"}
-    assert (rules_dir(project) / "auto.style.mdc").read_text(encoding="utf-8") == "shared style\n"
+    assert set(emitted(project)) == {GENERATED_RULE_NAME, "agentize.auto.generated.style.mdc"}
+    assert (rules_dir(project) / "agentize.auto.generated.style.mdc").read_text(
+        encoding="utf-8"
+    ) == "shared style\n"
 
 
 def test_profile_layer_overrides_shared(project: Path):
@@ -130,8 +149,10 @@ def test_profile_layer_overrides_shared(project: Path):
 
     main(["-C", str(project), "mount"])
 
-    assert set(emitted(project)) == {GENERATED_RULE_NAME, "auto.style.mdc"}
-    assert (rules_dir(project) / "auto.style.mdc").read_text(encoding="utf-8") == "human style\n"
+    assert set(emitted(project)) == {GENERATED_RULE_NAME, "agentize.auto.generated.style.mdc"}
+    assert (rules_dir(project) / "agentize.auto.generated.style.mdc").read_text(
+        encoding="utf-8"
+    ) == "human style\n"
 
 
 def test_profile_flag_selects_a_different_layer(project: Path):
@@ -139,18 +160,24 @@ def test_profile_flag_selects_a_different_layer(project: Path):
 
     main(["-C", str(project), "mount", "--profile", "agent"])
 
-    assert (rules_dir(project) / "auto.style.mdc").read_text(encoding="utf-8") == "agent style\n"
+    assert (rules_dir(project) / "agentize.auto.generated.style.mdc").read_text(
+        encoding="utf-8"
+    ) == "agent style\n"
 
 
 def test_removing_a_source_rule_deletes_the_emitted_file(project: Path):
     extra = write(project / ".agents" / "shared" / "extra.mdc", "extra\n")
     main(["-C", str(project), "mount"])
-    assert set(emitted(project)) == {GENERATED_RULE_NAME, "auto.extra.mdc", "auto.style.mdc"}
+    assert set(emitted(project)) == {
+        GENERATED_RULE_NAME,
+        "agentize.auto.generated.extra.mdc",
+        "agentize.auto.generated.style.mdc",
+    }
 
     extra.unlink()
     main(["-C", str(project), "mount"])
 
-    assert set(emitted(project)) == {GENERATED_RULE_NAME, "auto.style.mdc"}
+    assert set(emitted(project)) == {GENERATED_RULE_NAME, "agentize.auto.generated.style.mdc"}
 
 
 def test_handwritten_rule_survives(project: Path):
@@ -164,11 +191,11 @@ def test_handwritten_rule_survives(project: Path):
 
 def test_second_run_touches_nothing(project: Path):
     main(["-C", str(project), "mount"])
-    before = (rules_dir(project) / "auto.style.mdc").stat().st_mtime_ns
+    before = (rules_dir(project) / "agentize.auto.generated.style.mdc").stat().st_mtime_ns
 
     main(["-C", str(project), "mount"])
 
-    assert (rules_dir(project) / "auto.style.mdc").stat().st_mtime_ns == before
+    assert (rules_dir(project) / "agentize.auto.generated.style.mdc").stat().st_mtime_ns == before
 
 
 def test_changed_source_is_rewritten(project: Path):
@@ -177,7 +204,9 @@ def test_changed_source_is_rewritten(project: Path):
 
     main(["-C", str(project), "mount"])
 
-    assert (rules_dir(project) / "auto.style.mdc").read_text(encoding="utf-8") == "changed\n"
+    assert (rules_dir(project) / "agentize.auto.generated.style.mdc").read_text(
+        encoding="utf-8"
+    ) == "changed\n"
 
 
 def test_unknown_profile_fails_with_a_message(project: Path, capsys):
@@ -197,7 +226,7 @@ def test_check_fails_and_names_the_missing_file(project: Path, capsys):
     assert main(["-C", str(project), "mount", "--check"]) == 1
 
     captured = capsys.readouterr()
-    assert "create .cursor/rules/auto.style.mdc" in captured.out
+    assert "create .cursor/rules/agentize.auto.generated.style.mdc" in captured.out
     assert f"create .cursor/rules/{GENERATED_RULE_NAME}" in captured.out
     assert "out of date" in captured.err
 
@@ -210,7 +239,7 @@ def test_check_never_writes(project: Path):
 def test_check_does_not_touch_an_existing_stale_file(project: Path):
     main(["-C", str(project), "mount"])
     write(project / ".agents" / "shared" / "core" / "style.mdc", "changed\n")
-    target = rules_dir(project) / "auto.style.mdc"
+    target = rules_dir(project) / "agentize.auto.generated.style.mdc"
     before = target.stat().st_mtime_ns
 
     assert main(["-C", str(project), "mount", "--check"]) == 1
@@ -225,4 +254,4 @@ def test_check_reports_a_stale_deletion(project: Path, capsys):
     extra.unlink()
 
     assert main(["-C", str(project), "mount", "--check"]) == 1
-    assert "delete .cursor/rules/auto.extra.mdc" in capsys.readouterr().out
+    assert "delete .cursor/rules/agentize.auto.generated.extra.mdc" in capsys.readouterr().out

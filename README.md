@@ -73,7 +73,7 @@ the binder. An inherited server still rebases from the parent yaml (so
 `uv run --directory family/orchestrator` becomes `../family/orchestrator`
 inside a product folder).
 
-Cascade writes `.cursor/mcp.json`, `.cursor/rules/auto.do-not-edit.mdc`, and
+Cascade writes `.cursor/mcp.json`, `.cursor/rules/agentize.auto.generated.do-not-edit.mdc`, and
 `.agentize/parents.yaml`. It never plants `AGENTS.md`. Missing child
 paths are a skip. Scope is the `mani.yaml` you started in — a child's own
 MCP servers do not leak up into the binder.
@@ -108,15 +108,15 @@ name and nothing overwrites anything:
 
 | Artifact | One identity | `--profile-all` |
 | --- | --- | --- |
-| `.cursor/rules/` | `auto.style.mdc` | `auto.human.style.mdc`, `auto.php.style.mdc` |
-| `.cursor/skills/`, `.opencode/skills/` | `auto.review/` | `auto.human.review/`, `auto.php.review/` |
+| `.cursor/rules/` | `agentize.auto.generated.style.mdc` | `agentize.auto.generated.human.style.mdc`, `agentize.auto.generated.php.style.mdc` |
+| `.cursor/skills/`, `.opencode/skills/` | `agentize.auto.generated.review/` | `agentize.auto.generated.human.review/`, `agentize.auto.generated.php.review/` |
 | project `mcpServers` / `mcp` keys | `postgres` | `human.postgres`, `php.postgres` |
 | `~/.cursor/mcp.json` keys | `agentize-postgres` | `agentize-human.postgres` |
 | `AGENTS.md` | one flat rule list | one `### <label> (<kind>)` section per identity |
 | `opencode.json` `lsp` | that identity's choice | union; `all` anywhere wins, all-off stays `false` |
 
 Pruning stays a union: switching back to one identity deletes the qualified
-files of the others, and the generated `auto.do-not-edit.mdc` belongs to the
+files of the others, and the generated `agentize.auto.generated.do-not-edit.mdc` belongs to the
 host, not to an identity. Passing `--profile-all` together with
 `--profile`/`--agent` is refused.
 
@@ -141,7 +141,7 @@ Hermes uses the same `agentize-` prefix inside a dedicated Desktop profile
 declared profile and agent slug: `profiles.human` → `agentize-human`,
 `agents.default` → `agentize-agent`. Owned MCP keys go in that profile's
 `config.yaml`. Project skills go in that profile's `skills/` tree under
-`emit_prefix` (default `auto.`), so bundled Hermes skills stay. `isolate_data`
+`emit_prefix` (default `agentize.auto.generated.`), so bundled Hermes skills stay. `isolate_data`
 does not hide the bot from Desktop. The root is the first existing of
 `%LOCALAPPDATA%/hermes` (Windows) then `~/.hermes`. `cleanup --home` removes
 those profile directories. The default Hermes Desktop home is not rewritten.
@@ -226,9 +226,9 @@ A **profile** is who is driving (a human, today). An **agent slug** is which bot
 
 A skill layers like everything else, with one difference: the **directory** is the unit. The winning layer supplies the whole skill, never a mixture. A tree at `<source>/skills/<name>/` (skillize / `npx skills`) competes as `shared/skills/<name>/`.
 
-Each host receives its own copy, in a directory only that host reads: `.cursor/skills`, `.opencode/skills`, and the Hermes profile `skills/` tree (`<hermes-root>/profiles/agentize-<label>/skills/auto.*`).
+Each host receives its own copy, in a directory only that host reads: `.cursor/skills`, `.opencode/skills`, and the Hermes profile `skills/` tree (`<hermes-root>/profiles/agentize-<label>/skills/agentize.auto.generated.*`).
 
-<small>Cursor also gets <code>.cursor/rules/auto.do-not-edit.mdc</code> on every <code>mount</code> (and on every cascaded child). That rule is always-on: do not edit any <code>.cursor/rules/auto*</code> file; change <code>.agents/</code> and remount. The same prefix marks copied skills.</small>
+<small>Cursor also gets <code>.cursor/rules/agentize.auto.generated.do-not-edit.mdc</code> on every <code>mount</code> (and on every cascaded child). That rule is always-on: do not edit any <code>.cursor/rules/agentize.auto.generated*</code> file; change <code>.agents/</code> and remount. The same prefix marks copied skills.</small>
 
 <small>A <code>SKILL.md</code> from one layer describing helper files from another is not a skill anybody wrote. agentize never writes into <code>.agents/skills</code>, <code>.claude/skills</code> or <code>.codex/skills</code>, which several hosts scan in common — so a skill intended for one host cannot be picked up by another, and there is nothing to clean up after the fact. agentize copies skills the project already owns. It does not fetch them — <code>npx skills</code> and the host marketplaces do that.</small>
 
@@ -252,7 +252,7 @@ source: .agents
 
 hosts:
   cursor:
-    emit_prefix: auto.
+    emit_prefix: agentize.auto.generated.
     pin: latest                 # or omit; Cursor Agent updates itself
   opencode:
     default: true               # bare `agentize` starts this until last.yaml remembers
@@ -344,7 +344,7 @@ worktree:
 
 <hermes-root>/profiles/agentize-<identity>/
   config.yaml          owned `mcp_servers.agentize-*` keys; rest of Hermes stays
-  skills/auto.<name>/  project skills; bundled Hermes skills are not prefixed
+  skills/agentize.auto.generated.<name>/  project skills; bundled Hermes skills are not prefixed
                        Windows native root is %LOCALAPPDATA%/hermes, else ~/.hermes
 ```
 

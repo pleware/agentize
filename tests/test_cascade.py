@@ -19,7 +19,7 @@ version: 1
 source: .agents
 hosts:
   cursor:
-    emit_prefix: auto.
+    emit_prefix: agentize.auto.generated.
 profiles:
   human:
     default: true
@@ -108,11 +108,11 @@ def test_mount_plants_mcp_on_existing_children(tmp_path: Path):
     assert parents["parents"][0]["rel"] == ".."
     assert parents["parents"][0]["kind"] == "workspace"
     assert not (erp / "AGENTS.md").exists()
-    leave = erp / ".cursor" / "rules" / "auto.do-not-edit.mdc"
+    leave = erp / ".cursor" / "rules" / "agentize.auto.generated.do-not-edit.mdc"
     assert leave.is_file()
     assert "alwaysApply: true" in leave.read_text(encoding="utf-8")
     assert [path.name for path in (erp / ".cursor" / "rules").glob("*.mdc")] == [
-        "auto.do-not-edit.mdc"
+        "agentize.auto.generated.do-not-edit.mdc"
     ]
 
 
@@ -136,7 +136,7 @@ def test_inherit_false_skips_mcp(tmp_path: Path):
     assert main(["-C", str(ws), "mount"]) == 0
     assert not (landing / ".cursor" / "mcp.json").exists()
     assert (landing / ".agentize" / "parents.yaml").is_file()
-    assert (landing / ".cursor" / "rules" / "auto.do-not-edit.mdc").is_file()
+    assert (landing / ".cursor" / "rules" / "agentize.auto.generated.do-not-edit.mdc").is_file()
 
 
 def test_child_mcp_list_filters_parent_servers(tmp_path: Path):
@@ -200,12 +200,8 @@ def test_mixed_origins_keep_separate_directory_roots(tmp_path: Path):
             "version": 1,
             "mcp": {
                 "servers": {
-                    "shared": {
-                        "command": ["uv", "run", "--directory", "tools/shared", "s"]
-                    },
-                    "orch": {
-                        "command": ["uv", "run", "--directory", "family/orch", "o"]
-                    },
+                    "shared": {"command": ["uv", "run", "--directory", "tools/shared", "s"]},
+                    "orch": {"command": ["uv", "run", "--directory", "family/orch", "o"]},
                 }
             },
         }

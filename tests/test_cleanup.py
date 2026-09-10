@@ -103,7 +103,7 @@ def test_cleanup_does_not_unmount_host_files(tmp_path: Path):
     assert main(["-C", str(tmp_path), "init"]) == 0
     (tmp_path / "opencode.json").write_text("{}\n", encoding="utf-8")
     (tmp_path / "AGENTS.md").write_text("keep me\n", encoding="utf-8")
-    cursor_rule = tmp_path / ".cursor" / "rules" / "auto.example.mdc"
+    cursor_rule = tmp_path / ".cursor" / "rules" / "agentize.auto.generated.example.mdc"
     cursor_rule.parent.mkdir(parents=True)
     cursor_rule.write_text("rule\n", encoding="utf-8")
 

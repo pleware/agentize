@@ -23,7 +23,7 @@ from .resolve import ResolvedFile
 MARKER = "SKILL.md"
 SEGMENT = "skills"
 SHARED_LAYER = "shared"
-DEFAULT_PREFIX = "auto."
+DEFAULT_PREFIX = "agentize.auto.generated."
 
 
 @dataclass(frozen=True)
@@ -72,7 +72,8 @@ def skill_resolve_map(units: Iterable[str]) -> dict[str, str]:
 
 
 def emit_dir_name(name: str, prefix: str, qualifier: str | None = None) -> str:
-    """`review` → `auto.review`, or `auto.human.review` when an identity is named.
+    """`review` → `agentize.auto.generated.review`, or
+    `agentize.auto.generated.human.review` when an identity is named.
 
     A skill already spelled with the prefix keeps its name: the author chose it.
     """
@@ -133,9 +134,7 @@ def unknown_names(resolved: Iterable[ResolvedFile], selected: Iterable[str]) -> 
     return tuple(sorted(name for name in selected if name not in available))
 
 
-def stale_dir_names(
-    existing: Iterable[str], wanted: Iterable[str], prefix: str
-) -> tuple[str, ...]:
+def stale_dir_names(existing: Iterable[str], wanted: Iterable[str], prefix: str) -> tuple[str, ...]:
     """Emitted skill directories that are no longer resolved.
 
     Only prefixed names are candidates, so a hand-written skill sitting in the

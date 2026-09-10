@@ -15,7 +15,7 @@ version: 1
 source: .agents
 hosts:
   cursor:
-    emit_prefix: auto.
+    emit_prefix: agentize.auto.generated.
   opencode: {}
 profiles:
   human:
@@ -174,8 +174,7 @@ def test_instruction_paths_match_the_agents_md_listing(project: Path):
 def test_mount_is_idempotent_across_all_targets(project: Path):
     main(["-C", str(project), "mount"])
     stamps = {
-        path: path.stat().st_mtime_ns
-        for path in (project / "AGENTS.md", project / "opencode.json")
+        path: path.stat().st_mtime_ns for path in (project / "AGENTS.md", project / "opencode.json")
     }
 
     main(["-C", str(project), "mount"])
