@@ -101,10 +101,11 @@ Last `mount` wins if two trees disagree. Two Cursor windows share one user
 file.
 
 Hermes uses the same `agentize-` prefix inside a dedicated profile
-(`~/.hermes/profiles/agentize-<identity>/config.yaml`, or the project's
+(`<hermes-root>/profiles/agentize-<identity>/config.yaml`, or the project's
 `.agentize/hosts/hermes/data/<identity>/` when `isolate_data` is on).
-`cleanup --home` removes those profile directories. The default Hermes
-Desktop home is not rewritten.
+The root is the first existing of `%LOCALAPPDATA%/hermes` (Windows) then
+`~/.hermes`. `cleanup --home` removes those profile directories. The
+default Hermes Desktop home is not rewritten.
 
 ### Launchers
 
@@ -116,7 +117,7 @@ Desktop home is not rewritten.
 
 `agentize cleanup` (or `--cleanup`) is the inverse of `init`.
 
-<small>It deletes <code>.agentize/</code> and any launcher whose bytes still match the planted trampoline. A hand-edited launcher stays. <code>agentize.yaml</code> stays. Files <code>mount</code> wrote (<code>.cursor/</code>, <code>opencode.json</code>, <code>tui.json</code>, <code>AGENTS.md</code>) stay. <code>--home</code> also deletes <code>~/.agentize/</code> (<code>$AGENTIZE_HOME</code> if set), prefixed Cursor user-MCP keys, and <code>~/.hermes/profiles/agentize-*</code>. <code>--check</code> reports without deleting.</small>
+<small>It deletes <code>.agentize/</code> and any launcher whose bytes still match the planted trampoline. A hand-edited launcher stays. <code>agentize.yaml</code> stays. Files <code>mount</code> wrote (<code>.cursor/</code>, <code>opencode.json</code>, <code>tui.json</code>, <code>AGENTS.md</code>) stay. <code>--home</code> also deletes <code>~/.agentize/</code> (<code>$AGENTIZE_HOME</code> if set), prefixed Cursor user-MCP keys, and <code>agentize-*</code> Hermes profiles under the detected Hermes home. <code>--check</code> reports without deleting.</small>
 
 ### Isolated hosts
 
@@ -302,15 +303,16 @@ worktree:
   last.yaml
   ignite/<pin>/        planted ignite kit (`ensure.sh`); shared by checkouts
 
-~/.hermes/profiles/agentize-<identity>/
+<hermes-root>/profiles/agentize-<identity>/
   config.yaml          owned `mcp_servers.agentize-*` keys; rest of Hermes stays
+                       Windows native root is %LOCALAPPDATA%/hermes, else ~/.hermes
 ```
 
 Policy is one file at the project root, beside `mani.yaml` and `ignite.toml`.
 
 ### Hosts and versions
 
-`pin: latest` (or omitting `pin`) is the default for Cursor Agent and OpenCode. Both programs update themselves. Hermes is not fetched into `.agentize/hosts/`; `fetch` locates the machine install (PATH or `~/.hermes`) and `run` sets `HERMES_HOME` to the profile directory `mount` wrote.
+`pin: latest` (or omitting `pin`) is the default for Cursor Agent and OpenCode. Both programs update themselves. Hermes is not fetched into `.agentize/hosts/`; `fetch` locates the machine install (PATH or the detected Hermes home) and `run` sets `HERMES_HOME` to the profile directory `mount` wrote.
 
 <small>agentize installs them once into <code>.agentize/hosts/&lt;name&gt;/versions/latest/</code> and does not fight a later overwrite. <code>agentize fetch</code> is that first copy. If the <code>latest</code> tree already looks installed, fetch leaves it alone so a self-update is not replaced by an older archive. A numbered pin still skips when that exact version is already present. Cursor has no <code>/latest/</code> download URL. The first fetch reads today's build id from <code>https://cursor.com/install</code>, then unpacks that archive into <code>latest</code>. OpenCode uses GitHub's <code>releases/latest</code> redirect. A concrete pin (<code>pin: "1.18.4"</code> or <code>pin: "2026.09.02-c22c1a3"</code>) is the escape hatch: fetch that tag, and <code>run</code> refuses if the <code>current</code> pointer does not match.</small>
 

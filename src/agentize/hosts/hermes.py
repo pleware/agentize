@@ -4,9 +4,12 @@ Hermes has no project ``mcp.json``. It reads ``mcp_servers`` from
 ``$HERMES_HOME/config.yaml``. agentize therefore writes a dedicated profile
 directory and sets ``HERMES_HOME`` on launch.
 
-A human without ``isolate_data`` gets ``~/.hermes/profiles/agentize-<name>/``.
-An isolated identity (a bot) gets a directory under the project's
-``.agentize/hosts/hermes/data/`` so it does not share the user's Desktop home.
+A human without ``isolate_data`` gets
+``<hermes-root>/profiles/agentize-<name>/``. The root is the first existing
+directory among the platform-native home (``%LOCALAPPDATA%/hermes`` on
+Windows) and ``~/.hermes``. An isolated identity (a bot) gets a directory
+under the project's ``.agentize/hosts/hermes/data/`` so it does not share
+the user's Desktop home.
 
 Only keys prefixed ``agentize-`` are owned. Catalog entries and hand-edited
 servers stay. ``fetch`` does not download Hermes — it locates the machine
@@ -15,7 +18,9 @@ install.
 
 from __future__ import annotations
 
+import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -32,8 +37,38 @@ MCP_KEY = "mcp_servers"
 PROFILES_DIR = "profiles"
 
 
+def _user_home() -> Path:
+    return Path.home()
+
+
+def hermes_root_candidates() -> tuple[Path, ...]:
+    """Native Hermes home first, then ``~/.hermes``.
+
+    Official Windows Desktop and the installer use
+    ``%LOCALAPPDATA%/hermes``. POSIX and WSL use ``~/.hermes``. A machine
+    may have both; ``user_hermes_root`` picks the first that exists.
+    """
+    found: list[Path] = []
+    if sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "").strip()
+        base = Path(local) if local else _user_home() / "AppData" / "Local"
+        found.append(base / "hermes")
+    posix = _user_home() / ".hermes"
+    if not found or posix != found[0]:
+        found.append(posix)
+    return tuple(found)
+
+
+def existing_hermes_roots() -> tuple[Path, ...]:
+    return tuple(path for path in hermes_root_candidates() if path.is_dir())
+
+
 def user_hermes_root() -> Path:
-    return Path.home() / ".hermes"
+    candidates = hermes_root_candidates()
+    for path in candidates:
+        if path.is_dir():
+            return path
+    return candidates[0]
 
 
 def hermes_enabled(config: Config) -> bool:
@@ -126,32 +161,48 @@ def locate_binary() -> Path:
     found = shutil.which("hermes")
     if found:
         return Path(found)
-    root = user_hermes_root()
-    candidates = (
-        root / "hermes-agent" / "venv" / "bin" / "hermes",
-        root / "hermes-agent" / "venv" / "Scripts" / "hermes.exe",
-        root / "bin" / "hermes",
-        root / "bin" / "hermes.exe",
-    )
-    for path in candidates:
-        if path.is_file():
-            return path
+    for root in hermes_root_candidates():
+        for path in (
+            root / "hermes-agent" / "venv" / "bin" / "hermes",
+            root / "hermes-agent" / "venv" / "Scripts" / "hermes.exe",
+            root / "bin" / "hermes",
+            root / "bin" / "hermes.exe",
+        ):
+            if path.is_file():
+                return path
     raise AgentizeError(
-        "hermes is not on PATH and no install was found under ~/.hermes. "
+        "hermes is not on PATH and no install was found under "
+        "%LOCALAPPDATA%\\hermes or ~/.hermes. "
         "Install Hermes with its own installer, then retry"
     )
 
 
 def strip_agentize_profiles(*, root: Path | None = None) -> tuple[Path, ...]:
     """Remove ``agentize-*`` profile directories. Other Hermes profiles stay."""
-    base = (root or user_hermes_root()) / PROFILES_DIR
-    if not base.is_dir():
-        return ()
+    homes = (root,) if root is not None else existing_hermes_roots()
     removed: list[Path] = []
-    for child in sorted(base.iterdir()):
-        if child.is_dir() and child.name.startswith(PREFIX):
-            shutil.rmtree(child)
-            removed.append(child)
+    for home in homes:
+        base = home / PROFILES_DIR
+        if not base.is_dir():
+            continue
+        for child in sorted(base.iterdir()):
+            if child.is_dir() and child.name.startswith(PREFIX):
+                shutil.rmtree(child)
+                removed.append(child)
+    return tuple(removed)
+
+
+def drop_stale_named_profiles(identity: Profile, keep: Path) -> tuple[Path, ...]:
+    """Remove the same ``agentize-<name>`` dir from every other Hermes root."""
+    name = profile_dir_name(identity)
+    keep_key = keep.resolve()
+    removed: list[Path] = []
+    for home in existing_hermes_roots():
+        stale = home / PROFILES_DIR / name
+        if stale.resolve() == keep_key or not stale.is_dir():
+            continue
+        shutil.rmtree(stale)
+        removed.append(stale)
     return tuple(removed)
 
 

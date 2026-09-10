@@ -161,7 +161,7 @@ def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
     lines = list(describe(plan, root))
     if home:
         lines.append("remove agentize-* from ~/.cursor/mcp.json")
-        lines.append("remove ~/.hermes/profiles/agentize-*")
+        lines.append("remove agentize-* from Hermes profiles")
     if not lines:
         print("agentize: nothing to clean")
         return 0
@@ -294,7 +294,12 @@ def _emit_hermes(root: Path, config, identity: Profile, *, check: bool) -> int:
     if not hermes.hermes_enabled(config):
         return 0
     plan = hermes.plan_mcp(root, config, identity)
-    return _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
+    code = _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
+    if not check:
+        keep = hermes.profile_home(root, identity)
+        for path in hermes.drop_stale_named_profiles(identity, keep):
+            print(f"  remove stale {path}")
+    return code
 
 
 def _mount_for_run(root: Path, config, identity: Profile) -> None:
@@ -312,6 +317,9 @@ def _mount_for_run(root: Path, config, identity: Profile) -> None:
         plan = hermes.plan_mcp(root, config, identity)
         for line in apply(plan.root or root, plan):
             print(f"  {line}", file=sys.stderr)
+        keep = hermes.profile_home(root, identity)
+        for path in hermes.drop_stale_named_profiles(identity, keep):
+            print(f"  remove stale {path}", file=sys.stderr)
 
 
 def cmd_run(

@@ -182,3 +182,86 @@ def test_cleanup_home_removes_prefixed_profiles(tmp_path: Path, monkeypatch):
     assert removed == (drop,)
     assert keep.is_dir()
     assert not drop.exists()
+
+
+def test_user_hermes_root_prefers_existing_native_home(tmp_path: Path, monkeypatch):
+    native = tmp_path / "AppData" / "Local" / "hermes"
+    posix = tmp_path / "home" / ".hermes"
+    native.mkdir(parents=True)
+    posix.mkdir(parents=True)
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (native, posix))
+    assert hermes.user_hermes_root() == native
+
+
+def test_user_hermes_root_falls_back_to_dot_hermes(tmp_path: Path, monkeypatch):
+    native = tmp_path / "AppData" / "Local" / "hermes"
+    posix = tmp_path / "home" / ".hermes"
+    posix.mkdir(parents=True)
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (native, posix))
+    assert hermes.user_hermes_root() == posix
+
+
+def test_user_hermes_root_defaults_to_native_when_none_exist(
+    tmp_path: Path, monkeypatch
+):
+    native = tmp_path / "AppData" / "Local" / "hermes"
+    posix = tmp_path / "home" / ".hermes"
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (native, posix))
+    assert hermes.user_hermes_root() == native
+
+
+def test_hermes_root_candidates_windows_native_first(tmp_path: Path, monkeypatch):
+    home = tmp_path / "Users" / "me"
+    local = home / "AppData" / "Local"
+    monkeypatch.setattr(hermes.sys, "platform", "win32")
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setattr(hermes, "_user_home", lambda: home)
+    assert hermes.hermes_root_candidates() == (local / "hermes", home / ".hermes")
+
+
+def test_hermes_root_candidates_posix_is_dot_hermes(tmp_path: Path, monkeypatch):
+    home = tmp_path / "home" / "me"
+    monkeypatch.setattr(hermes.sys, "platform", "linux")
+    monkeypatch.delenv("LOCALAPPDATA", raising=False)
+    monkeypatch.setattr(hermes, "_user_home", lambda: home)
+    assert hermes.hermes_root_candidates() == (home / ".hermes",)
+
+
+def test_drop_stale_named_profiles_leaves_the_chosen_root(tmp_path: Path, monkeypatch):
+    native = tmp_path / "AppData" / "Local" / "hermes"
+    posix = tmp_path / "home" / ".hermes"
+    keep = native / "profiles" / f"{PREFIX}human"
+    stale = posix / "profiles" / f"{PREFIX}human"
+    other = posix / "profiles" / "personal"
+    keep.mkdir(parents=True)
+    stale.mkdir(parents=True)
+    other.mkdir(parents=True)
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (native, posix))
+    identity = parse_config(
+        {
+            "version": 1,
+            "profiles": {"human": {"default": True}},
+        }
+    ).profiles["human"]
+
+    removed = hermes.drop_stale_named_profiles(identity, keep)
+    assert removed == (stale,)
+    assert keep.is_dir()
+    assert other.is_dir()
+    assert not stale.exists()
+
+
+def test_strip_without_root_walks_every_existing_home(tmp_path: Path, monkeypatch):
+    native = tmp_path / "AppData" / "Local" / "hermes"
+    posix = tmp_path / "home" / ".hermes"
+    drop_native = native / "profiles" / f"{PREFIX}human"
+    drop_posix = posix / "profiles" / f"{PREFIX}human"
+    keep = native / "profiles" / "personal"
+    drop_native.mkdir(parents=True)
+    drop_posix.mkdir(parents=True)
+    keep.mkdir(parents=True)
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (native, posix))
+
+    removed = hermes.strip_agentize_profiles()
+    assert set(removed) == {drop_native, drop_posix}
+    assert keep.is_dir()
