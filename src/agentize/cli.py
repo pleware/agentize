@@ -8,7 +8,8 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .cascade import cascade, cascade_all, find_inherit_root, plant_child, plant_child_all
+from .ancestry import find_inherit_root
+from .cascade import cascade, cascade_all, plant_child, plant_child_all
 from .cleanup import apply_cleanup, describe, plan_cleanup
 from .config import CONFIG_NAME, ConfigError, Profile, load_config
 from .errors import AgentizeError

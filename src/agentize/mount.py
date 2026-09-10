@@ -11,6 +11,7 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from . import skills
+from .ancestry import cascade_rules
 from .config import Config, LspServer, McpServer, Profile, identity_label
 from .errors import MountError
 from .hosts import agents_md, cursor, opencode
@@ -192,6 +193,7 @@ def _plan_cursor(
     writes: list[Write] = []
     deletes: list[Path] = []
     emitted_rules: dict[str, cursor.Emitted] = {}
+    cascade_names: list[str] = []
     skill_count = 0
     servers: list[McpServer] = []
     host = config.hosts.get("cursor")
@@ -210,6 +212,17 @@ def _plan_cursor(
                         "That name is reserved for the generated leave-alone rule."
                     )
                 emitted_rules.setdefault(item.name, item)
+        for rule in cascade_rules(project_root):
+            name = cursor.emit_name(rule.key, prefix)
+            if name == cursor.GENERATED_RULE_NAME:
+                raise MountError(
+                    f"a cascade rule would be written as {cursor.GENERATED_RULE_NAME}. "
+                    "That name is reserved for the generated leave-alone rule."
+                )
+            if name in emitted_rules:
+                continue  # the project's own rule wins over an inherited one
+            cascade_names.append(name)
+            writes.append(Write(dst / name, (rule.owner / rule.rel).read_bytes()))
         wanted = [emitted_rules[name] for name in sorted(emitted_rules)]
         writes.extend(
             Write(dst / item.name, (source_root / item.source).read_bytes()) for item in wanted
@@ -217,7 +230,7 @@ def _plan_cursor(
         writes.append(
             Write(cursor.generated_rule_path(project_root), cursor.generated_rule_bytes())
         )
-        wanted_names = [item.name for item in wanted]
+        wanted_names = [item.name for item in wanted] + cascade_names
         if cursor.GENERATED_RULE_NAME.startswith(prefix):
             wanted_names.append(cursor.GENERATED_RULE_NAME)
         existing = (

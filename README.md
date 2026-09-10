@@ -73,10 +73,17 @@ the binder. An inherited server still rebases from the parent yaml (so
 `uv run --directory family/orchestrator` becomes `../family/orchestrator`
 inside a product folder).
 
-Cascade writes `.cursor/mcp.json`, `.cursor/rules/auto.do-not-edit.mdc`,
-and `.agentize/parents.yaml`. It never plants `AGENTS.md`. Missing child
+Cascade writes `.cursor/mcp.json`, `.cursor/rules/auto.do-not-edit.mdc`, and
+`.agentize/parents.yaml`. It never plants `AGENTS.md`. Missing child
 paths are a skip. Scope is the `mani.yaml` you started in — a child's own
 MCP servers do not leak up into the binder.
+
+A `cascade/` directory under `source:` holds always-on rules that descend
+to every child: each `.mdc` is planted into every descendant's
+`.cursor/rules/` under the child's own `emit_prefix`, and a child's own
+`mount` re-derives the same set from its ancestors. The nearest owner wins
+on a filename, so a product can override a binder rule without editing the
+binder.
 
 A binder with an empty `mcp:` list does not write an empty project
 `mcp.json` onto a child that has no `agentize.yaml`.

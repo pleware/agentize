@@ -9,16 +9,16 @@ inherits (opt-out is `inherit: []` / `inherit: false`). Cascade writes
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 
 import yaml
 
+from .ancestry import ObservedParent, cascade_rules, observed_parents
 from .config import CONFIG_NAME, Config, InheritSpec, McpServer, Profile, load_config
 from .errors import AgentizeError
 from .hosts import cursor
-from .ignite import IGNITE_TOML
-from .mani import child_dirs, lists_descendant, load_mani
+from .mani import child_dirs, load_mani
 from .markers import bind_markers
 from .mount import Plan, Write, apply, changes, plan_cursor_all
 from .store_tree import DIR_NAME, ensure_data_dir
@@ -29,12 +29,6 @@ DIRECTORY_FLAGS = frozenset({"--directory", "-C", "--project"})
 
 class CascadeError(AgentizeError):
     """A child policy could not be merged onto the parent."""
-
-
-@dataclass(frozen=True)
-class ObservedParent:
-    root: Path
-    kind: str
 
 
 def posix_rel(target: Path, start: Path) -> str:
@@ -112,32 +106,6 @@ def rebase_servers(config: Config, from_root: Path, to_root: Path) -> Config:
     return bind_markers(replace(config, servers=servers), from_root)
 
 
-def read_kind(root: Path) -> str | None:
-    path = root / IGNITE_TOML
-    if not path.is_file():
-        return None
-    try:
-        import tomllib
-
-        data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
-    section = data.get("workspace-tree") or data.get("layout")
-    if not isinstance(section, dict):
-        return None
-    kind = section.get("kind")
-    return kind if isinstance(kind, str) and kind else None
-
-
-def infer_kind(root: Path) -> str:
-    explicit = read_kind(root)
-    if explicit:
-        return explicit
-    if load_mani(root) is not None:
-        return "workspace"
-    return "product"
-
-
 def load_child_config(root: Path) -> Config | None:
     path = root / CONFIG_NAME
     if not path.is_file():
@@ -172,29 +140,6 @@ def identity_for_child(parent_identity: Profile, child: Config | None) -> Profil
     return parent_identity
 
 
-def observed_parents(root: Path) -> tuple[ObservedParent, ...]:
-    """Ancestors whose `mani.yaml` lists this checkout, nearest first."""
-    here = root.resolve()
-    found: list[ObservedParent] = []
-    current = here
-    while True:
-        parent = current.parent
-        if parent == current:
-            break
-        if load_mani(parent) is not None and lists_descendant(parent, here):
-            found.append(ObservedParent(root=parent, kind=infer_kind(parent)))
-        current = parent
-    return tuple(found)
-
-
-def find_inherit_root(root: Path) -> Path | None:
-    """Closest ancestor with `agentize.yaml` whose `mani.yaml` lists `root`."""
-    for item in observed_parents(root):
-        if (item.root / CONFIG_NAME).is_file():
-            return item.root
-    return None
-
-
 def parents_yaml(child: Path, parents: tuple[ObservedParent, ...]) -> str:
     payload = {
         "parents": [
@@ -218,6 +163,29 @@ def plan_generated_rule(child: Path) -> Plan:
         label="cursor: generated rule",
         writes=(Write(cursor.generated_rule_path(child), cursor.generated_rule_bytes()),),
     )
+
+
+def plan_cascade_rules(child: Path, *, config: Config | None = None) -> Plan:
+    """Shared `cascade/` rules into the child's `.cursor/rules/`.
+
+    The set comes from the child and every observed ancestor (nearest wins), so
+    the child's own mount and a parent's cascade plant the same bytes under the
+    same names.
+    """
+    cfg = config if config is not None else load_child_config(child)
+    host = cfg.hosts.get("cursor") if cfg is not None else None
+    prefix = (host.emit_prefix if host else "") or cursor.DEFAULT_PREFIX
+    dst = child / cursor.RULES_DIR
+    writes: list[Write] = []
+    for rule in cascade_rules(child):
+        name = cursor.emit_name(rule.key, prefix)
+        if name == cursor.GENERATED_RULE_NAME:
+            raise CascadeError(
+                f"a cascade rule would be written as {cursor.GENERATED_RULE_NAME}; "
+                "that name is reserved for the generated leave-alone rule."
+            )
+        writes.append(Write(dst / name, (rule.owner / rule.rel).read_bytes()))
+    return Plan(label="cursor: cascade rules", writes=tuple(writes))
 
 
 def plan_inherited_mcp(
@@ -308,6 +276,8 @@ def _plant_child(
     if spec.allows("mcp") and any(identity.mcp for identity in identities):
         mcp_plan = _plan_inherited_mcp(parent_root, child, parent_config, parent_identities)
         results.append((label, mcp_plan, apply_or_check(child, mcp_plan, check=check)))
+    cascade_plan = plan_cascade_rules(child, config=child_config)
+    results.append((label, cascade_plan, apply_or_check(child, cascade_plan, check=check)))
     if not check:
         ensure_data_dir(child)
     rule_plan = plan_generated_rule(child)
