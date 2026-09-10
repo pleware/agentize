@@ -43,7 +43,7 @@ BINARY_NAMES = {
     ),
 }
 
-PATH_NAMES = {"opencode": "opencode", "cursor": "agent"}
+PATH_NAMES = {"opencode": "opencode", "cursor": "agent", "hermes": "hermes"}
 
 OPENCODE_TAG = "https://github.com/sst/opencode/releases/download/{tag}/{asset}"
 OPENCODE_LATEST = (
@@ -199,12 +199,7 @@ def _looks_installed(dest: Path, host: str) -> bool:
     return True
 
 
-def isolated_binary(project_root: Path, host: Host) -> Path:
-    """The project copy, or an error naming `agentize fetch` — never PATH.
-
-    A floating host on `latest` lives in one rolling tree so its own updater
-    can overwrite the binary. A numbered pin still has to match `current`.
-    """
+def _isolated_project_binary(project_root: Path, host: Host) -> Path:
     if tracks_latest(host):
         pin = LATEST
     elif not host.pin:
@@ -230,3 +225,17 @@ def isolated_binary(project_root: Path, host: Host) -> Path:
             f"no isolated {host.name} at {dest}. Run: agentize fetch"
         )
     return find_binary(dest, host.name)
+
+
+def isolated_binary(project_root: Path, host: Host) -> Path:
+    """The project copy, or an error naming `agentize fetch` — never PATH.
+
+    A floating host on `latest` lives in one rolling tree so its own updater
+    can overwrite the binary. A numbered pin still has to match `current`.
+    Hermes is not copied here; ``run`` locates the machine install.
+    """
+    if host.name == "hermes":
+        from .hosts.hermes import locate_binary
+
+        return locate_binary()
+    return _isolated_project_binary(project_root, host)

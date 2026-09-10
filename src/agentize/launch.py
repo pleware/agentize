@@ -10,9 +10,10 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .config import Config, Host, Profile
+from .config import ENV_REF, Config, Host, McpServer, Profile
 from .errors import AgentizeError
 from .gitenv import git_env
+from .hosts import hermes
 from .install import isolated_binary, path_name
 from .store_tree import ensure_data_dir, host_data_dir
 
@@ -54,13 +55,43 @@ def isolation_env(project_root: Path, host: str) -> dict[str, str]:
     }
 
 
+def mcp_process_env(
+    servers: tuple[McpServer, ...], base: dict[str, str]
+) -> dict[str, str]:
+    """Resolve `${env:VAR}` MCP values from the parent environment.
+
+    OpenCode cannot keep those refs in `opencode.json` (it expands `$`
+    before parse). The child MCP process inherits this map.
+    """
+    out: dict[str, str] = {}
+    for server in servers:
+        if not server.env:
+            continue
+        for key, value in server.env.items():
+            match = ENV_REF.match(value.strip())
+            if match is None:
+                continue
+            source = match.group(1)
+            if source in base and base[source] != "":
+                out[key] = base[source]
+    return out
+
+
 def launch_env(
-    base: dict[str, str], project_root: Path, profile: Profile, host: str
+    base: dict[str, str],
+    project_root: Path,
+    profile: Profile,
+    host: str,
+    servers: tuple[McpServer, ...] = (),
 ) -> dict[str, str]:
     env = dict(base)
     env.update(git_env(profile))
     if profile.isolate_data:
         env.update(isolation_env(project_root, host))
+    if host == "opencode" and servers:
+        env.update(mcp_process_env(servers, env))
+    if host == "hermes":
+        env["HERMES_HOME"] = str(hermes.profile_home(project_root, profile))
     return env
 
 
@@ -84,6 +115,8 @@ def prepare(project_root: Path, profile: Profile, host: str) -> None:
     if profile.isolate_data and host == "opencode":
         ensure_data_dir(project_root)
         (host_data_dir(project_root, host) / "state").mkdir(parents=True, exist_ok=True)
+    if host == "hermes":
+        hermes.profile_home(project_root, profile).mkdir(parents=True, exist_ok=True)
 
 
 def spawn(project_root: Path, argv: list[str], env: dict[str, str]) -> int:

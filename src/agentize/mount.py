@@ -28,6 +28,8 @@ class Plan:
     label: str
     writes: tuple[Write, ...] = ()
     deletes: tuple[Path, ...] = ()
+    root: Path | None = None
+    """If set, ``apply`` / ``changes`` resolve paths from here, not the project."""
 
 
 def list_files(root: Path) -> tuple[str, ...]:

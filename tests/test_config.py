@@ -24,7 +24,7 @@ def test_readme_example_parses_fully():
     config = parse_config(yaml.safe_load(readme_example()), origin="README.md")
 
     assert config.source == Path(".agents")
-    assert set(config.hosts) == {"cursor", "opencode", "claude", "codex"}
+    assert set(config.hosts) == {"cursor", "opencode", "hermes", "claude", "codex"}
     assert config.hosts["cursor"].emit_prefix == "auto."
     assert config.hosts["cursor"].pin == "latest"
     assert not config.hosts["cursor"].default
@@ -35,8 +35,13 @@ def test_readme_example_parses_fully():
         "oh-my-openagent",
     )
     assert config.hosts["opencode"].pin == "latest"
+    assert config.hosts["hermes"].enabled
     assert not config.hosts["claude"].enabled
-    assert {host.name for host in config.enabled_hosts()} == {"cursor", "opencode"}
+    assert {host.name for host in config.enabled_hosts()} == {
+        "cursor",
+        "opencode",
+        "hermes",
+    }
 
     human = config.profiles["human"]
     assert config.default_profile is human

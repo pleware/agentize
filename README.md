@@ -7,7 +7,7 @@
 
 One project config. Every agent host.
 
-<small>Status: Cursor and OpenCode work. Claude Code and Codex are deferred. <code>run</code> starts the project's isolated copy of a host, not whatever happens to be on <code>PATH</code>. Both hosts track <code>latest</code> and update themselves after the first <code>fetch</code>. <code>run --agent</code> also plants <a href="https://github.com/pleware/ignite">ignite</a> and installs that slug's <code>needs</code> from <code>mise.toml</code>.</small>
+<small>Status: Cursor, OpenCode, and Hermes work. Claude Code and Codex are deferred. <code>run</code> starts the project's isolated copy of a host, not whatever happens to be on <code>PATH</code> — except Hermes, which uses the machine install and a dedicated profile home. Cursor and OpenCode track <code>latest</code> and update themselves after the first <code>fetch</code>. <code>run --agent</code> also plants <a href="https://github.com/pleware/ignite">ignite</a> and installs that slug's <code>needs</code> from <code>mise.toml</code>.</small>
 
 ## Install
 
@@ -80,6 +80,10 @@ MCP servers do not leak up into the binder.
 A binder with an empty `mcp:` list does not write an empty project
 `mcp.json` onto a child that has no `agentize.yaml`.
 
+Hermes is not cascaded into children. It has no project MCP file.
+`mount` writes the current identity's servers into a Hermes profile
+home (see [Host support](#host-support)).
+
 `${marker:rel}` in planted MCP `env` walks that same `mani.yaml` tree
 (binder → workspace → product). It does not look up a product folder name.
 An unresolved marker is dropped so runtime discovery can still find the tree.
@@ -96,6 +100,12 @@ of the user file stay. `hosts.cursor.user_mcp: false` turns this off.
 Last `mount` wins if two trees disagree. Two Cursor windows share one user
 file.
 
+Hermes uses the same `agentize-` prefix inside a dedicated profile
+(`~/.hermes/profiles/agentize-<identity>/config.yaml`, or the project's
+`.agentize/hosts/hermes/data/<identity>/` when `isolate_data` is on).
+`cleanup --home` removes those profile directories. The default Hermes
+Desktop home is not rewritten.
+
 ### Launchers
 
 `agentize init` plants three launchers (`agentize`, `agentize.ps1`, `agentize.cmd`) next to `agentize.yaml`. They are not the package.
@@ -106,7 +116,7 @@ file.
 
 `agentize cleanup` (or `--cleanup`) is the inverse of `init`.
 
-<small>It deletes <code>.agentize/</code> and any launcher whose bytes still match the planted trampoline. A hand-edited launcher stays. <code>agentize.yaml</code> stays. Files <code>mount</code> wrote (<code>.cursor/</code>, <code>opencode.json</code>, <code>tui.json</code>, <code>AGENTS.md</code>) stay. <code>--home</code> also deletes <code>~/.agentize/</code> (<code>$AGENTIZE_HOME</code> if set). <code>--check</code> reports without deleting.</small>
+<small>It deletes <code>.agentize/</code> and any launcher whose bytes still match the planted trampoline. A hand-edited launcher stays. <code>agentize.yaml</code> stays. Files <code>mount</code> wrote (<code>.cursor/</code>, <code>opencode.json</code>, <code>tui.json</code>, <code>AGENTS.md</code>) stay. <code>--home</code> also deletes <code>~/.agentize/</code> (<code>$AGENTIZE_HOME</code> if set), prefixed Cursor user-MCP keys, and <code>~/.hermes/profiles/agentize-*</code>. <code>--check</code> reports without deleting.</small>
 
 ### Isolated hosts
 
@@ -136,10 +146,10 @@ You declare **who** (profile or agent slug) and **where** (host) once, and it re
 
 ### Two axes
 
-|            | `cursor` | `opencode` | `claude` | `codex` |
-| ---------- | -------- | ---------- | -------- | ------- |
-| **human**  | ✓        |            |          |         |
-| **agent**  |          | ✓          |          | ✓       |
+|            | `cursor` | `opencode` | `hermes` | `claude` | `codex` |
+| ---------- | -------- | ---------- | -------- | -------- | ------- |
+| **human**  | ✓        |            | ✓        |          |         |
+| **agent**  |          | ✓          | ✓        |          | ✓       |
 
 A **host** is the program. A **profile** is who is driving it. They are independent: an agent can run in Cursor, a human can run in Codex.
 
@@ -209,6 +219,7 @@ hosts:
     plugins:
       - opencode-extended-sidebar  # TUI sidebar; omitted plugins default to this
       - oh-my-openagent            # server plugin; OpenCode installs both at startup
+  hermes: {}                    # MCP into a Hermes profile; no isolated binary
   claude: { enabled: false }
   codex:  { enabled: false }
 
@@ -284,18 +295,22 @@ worktree:
         current              pointer (text, not a symlink)
         data/                isolated OpenCode database
       cursor/                same shape; the binary inside is the agent CLI
+      hermes/data/<identity>/ isolated bot profile (`isolate_data`)
   .agents/             rules and project-owned skills — commit these
 
 ~/.agentize/           # or $AGENTIZE_HOME — machine, not the project
   last.yaml
   ignite/<pin>/        planted ignite kit (`ensure.sh`); shared by checkouts
+
+~/.hermes/profiles/agentize-<identity>/
+  config.yaml          owned `mcp_servers.agentize-*` keys; rest of Hermes stays
 ```
 
 Policy is one file at the project root, beside `mani.yaml` and `ignite.toml`.
 
 ### Hosts and versions
 
-`pin: latest` (or omitting `pin`) is the default for Cursor Agent and OpenCode. Both programs update themselves.
+`pin: latest` (or omitting `pin`) is the default for Cursor Agent and OpenCode. Both programs update themselves. Hermes is not fetched into `.agentize/hosts/`; `fetch` locates the machine install (PATH or `~/.hermes`) and `run` sets `HERMES_HOME` to the profile directory `mount` wrote.
 
 <small>agentize installs them once into <code>.agentize/hosts/&lt;name&gt;/versions/latest/</code> and does not fight a later overwrite. <code>agentize fetch</code> is that first copy. If the <code>latest</code> tree already looks installed, fetch leaves it alone so a self-update is not replaced by an older archive. A numbered pin still skips when that exact version is already present. Cursor has no <code>/latest/</code> download URL. The first fetch reads today's build id from <code>https://cursor.com/install</code>, then unpacks that archive into <code>latest</code>. OpenCode uses GitHub's <code>releases/latest</code> redirect. A concrete pin (<code>pin: "1.18.4"</code> or <code>pin: "2026.09.02-c22c1a3"</code>) is the escape hatch: fetch that tag, and <code>run</code> refuses if the <code>current</code> pointer does not match.</small>
 
@@ -352,15 +367,15 @@ agents:
 
 ## Host support
 
-| | Cursor | Claude Code | Codex | OpenCode |
-| --- | --- | --- | --- | --- |
-| Project MCP file | `.cursor/mcp.json` | `.mcp.json` | `.codex/config.toml` | `opencode.json` |
-| TUI plugins | — | — | — | `tui.json` |
-| Format | JSON | JSON | TOML | JSON |
-| Disable one server | UI toggle only | `disabledMcpjsonServers` | `enabled = false` | rendered whole |
-| Tool allowlist | `.cursor/cli.json` | permission rules | `enabled_tools` | — |
-| Env interpolation | `${env:...}` | — | `env:VAR` | — |
-| Native profiles | no | no | **yes** | no |
+| | Cursor | Claude Code | Codex | OpenCode | Hermes |
+| --- | --- | --- | --- | --- | --- |
+| Project MCP file | `.cursor/mcp.json` | `.mcp.json` | `.codex/config.toml` | `opencode.json` | — (profile `config.yaml`) |
+| TUI plugins | — | — | — | `tui.json` | — |
+| Format | JSON | JSON | TOML | JSON | YAML |
+| Disable one server | UI toggle only | `disabledMcpjsonServers` | `enabled = false` | rendered whole | owned `agentize-*` keys only |
+| Tool allowlist | `.cursor/cli.json` | permission rules | `enabled_tools` | — | `tools.include` on the server |
+| Env interpolation | `${env:...}` | — | `env:VAR` | — | `${env:...}` / `${VAR}` |
+| Native profiles | no | no | **yes** | no | **yes** (`HERMES_HOME`) |
 
 <small>Codex already has profiles. agentize generalizes that model to the hosts that do not.</small>
 
@@ -385,7 +400,7 @@ This is the short list on purpose. Most of this problem is already solved.
 | Toolchain versions        | `mise.toml` + ignite. `needs` on a slug is the mise tool list; versions stay in mise |
 | Git hook installation     | Same. agentize only exposes the profile hooks read |
 
-<small>What is left is narrow: one source, four dialects, plus the profile axis for the hosts that lack it.</small>
+<small>What is left is narrow: one source, five dialects, plus the profile axis for the hosts that lack it.</small>
 
 ## Gitignore
 

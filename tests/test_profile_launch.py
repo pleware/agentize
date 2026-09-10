@@ -11,7 +11,7 @@ import pytest
 from agentize.config import ConfigError, parse_config
 from agentize.errors import AgentizeError
 from agentize.gitenv import git_env
-from agentize.launch import isolation_env, launch_env, prepare, select_host
+from agentize.launch import isolation_env, launch_env, mcp_process_env, prepare, select_host
 from agentize.store_tree import host_data_dir
 
 CONFIG = parse_config(
@@ -218,3 +218,78 @@ def test_the_base_environment_is_not_mutated(tmp_path: Path):
     base = {"PATH": "/usr/bin"}
     launch_env(base, tmp_path, AGENT, "opencode")
     assert base == {"PATH": "/usr/bin"}
+
+
+def test_mcp_refs_are_copied_onto_the_process_env():
+    config = parse_config(
+        {
+            "version": 1,
+            "mcp": {
+                "servers": {
+                    "db": {
+                        "command": ["srv"],
+                        "env": {
+                            "DATABASE_URL": "${env:DATABASE_URL}",
+                            "LOG_LEVEL": "debug",
+                        },
+                    }
+                }
+            },
+        }
+    )
+    servers = (config.servers["db"],)
+    env = mcp_process_env(servers, {"DATABASE_URL": "postgres://local"})
+    assert env == {"DATABASE_URL": "postgres://local"}
+
+
+def test_empty_mcp_refs_are_not_copied():
+    config = parse_config(
+        {
+            "version": 1,
+            "mcp": {
+                "servers": {
+                    "db": {"command": ["srv"], "env": {"DATABASE_URL": "${env:DATABASE_URL}"}}
+                }
+            },
+        }
+    )
+    assert mcp_process_env((config.servers["db"],), {"DATABASE_URL": ""}) == {}
+
+
+def test_launch_injects_mcp_refs_only_for_opencode(tmp_path: Path):
+    config = parse_config(
+        {
+            "version": 1,
+            "mcp": {
+                "servers": {
+                    "db": {
+                        "command": ["srv"],
+                        "env": {"AGENT_REPO": "${env:REPO}"},
+                    }
+                }
+            },
+        }
+    )
+    servers = (config.servers["db"],)
+    base = {"REPO": "C:\\work\\app"}
+    opencode_env = launch_env(base, tmp_path, HUMAN, "opencode", servers=servers)
+    cursor_env = launch_env(base, tmp_path, HUMAN, "cursor", servers=servers)
+    assert opencode_env["AGENT_REPO"] == "C:\\work\\app"
+    assert "AGENT_REPO" not in cursor_env
+
+
+def test_hermes_launch_sets_profile_home(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("agentize.hosts.hermes.user_hermes_root", lambda: tmp_path / ".hermes")
+    env = launch_env({}, tmp_path, HUMAN, "hermes")
+    assert env["HERMES_HOME"] == str(tmp_path / ".hermes" / "profiles" / "agentize-human")
+
+
+def test_isolated_hermes_uses_project_data(tmp_path: Path):
+    env = launch_env({}, tmp_path, AGENT, "hermes")
+    assert env["HERMES_HOME"] == str(host_data_dir(tmp_path, "hermes") / "agent")
+
+
+def test_prepare_creates_the_hermes_profile_dir(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("agentize.hosts.hermes.user_hermes_root", lambda: tmp_path / ".hermes")
+    prepare(tmp_path, HUMAN, "hermes")
+    assert (tmp_path / ".hermes" / "profiles" / "agentize-human").is_dir()

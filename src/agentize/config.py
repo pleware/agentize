@@ -19,6 +19,7 @@ RESERVED_AGENT_SLUGS = frozenset({"build", "plan"})
 OPENCODE_DEFAULT_PLUGINS = ("opencode-extended-sidebar",)
 
 REFERENCE = re.compile(r"\$\{[^}]+\}")
+ENV_REF = re.compile(r"^\$\{env:([^}]+)\}$")
 SECRET_HINTS = ("token", "secret", "password", "passwd", "credential", "auth", "api_key", "apikey")
 NEED_TOOL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]*$")
 INHERIT_CHANNELS = frozenset({"mcp"})

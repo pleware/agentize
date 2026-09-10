@@ -15,6 +15,8 @@ from .errors import AgentizeError
 from .ignite import ensure_toolchain
 from .install import fetch_host
 from .launch import executable, global_executable, launch_env, prepare, select_host, spawn
+from .markers import bind_server_markers
+from .hosts import hermes
 from .mount import (
     Plan,
     apply,
@@ -159,6 +161,7 @@ def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
     lines = list(describe(plan, root))
     if home:
         lines.append("remove agentize-* from ~/.cursor/mcp.json")
+        lines.append("remove ~/.hermes/profiles/agentize-*")
     if not lines:
         print("agentize: nothing to clean")
         return 0
@@ -169,15 +172,22 @@ def cmd_cleanup(root: Path, *, check: bool, home: bool) -> int:
     apply_cleanup(plan)
     if home:
         strip_user_mcp_prefix()
+        stripped = hermes.strip_agentize_profiles()
+        for path in stripped:
+            print(f"agentize: remove {path}")
     return 0
 
 
 PLAN_BUILDERS = {"cursor": plan_cursor, "opencode": plan_opencode}
+# Hermes writes a profile home from `_emit_hermes`, not a project file.
+HOME_HOSTS = frozenset({"hermes"})
 
 
 def mount_plans(root: Path, config, identity: Profile) -> list[Plan]:
     plans = [plan_agents_md(root, config, identity)]
     for host in config.enabled_hosts():
+        if host.name in HOME_HOSTS:
+            continue
         builder = PLAN_BUILDERS.get(host.name)
         if builder is None:
             print(f"agentize: {host.name}: no renderer in this build, skipped", file=sys.stderr)
@@ -202,7 +212,8 @@ def _memory_for(identity: Profile) -> tuple[str | None, str | None]:
 
 
 def _print_plan(root: Path, plan: Plan, *, check: bool, prefix: str = "") -> int:
-    lines = changes(root, plan) if check else apply(root, plan)
+    base = plan.root or root
+    lines = changes(base, plan) if check else apply(base, plan)
     for line in lines:
         print(f"  {line}")
     print(f"agentize: {prefix}{plan.label}")
@@ -248,6 +259,7 @@ def cmd_mount(
             check=check,
         )
         pending += _emit_user_mcp(root, config, identity, check=check)
+        pending += _emit_hermes(root, config, identity, check=check)
     else:
         parent = find_inherit_root(root)
         if parent is None:
@@ -262,6 +274,7 @@ def cmd_mount(
             check=check,
         )
         pending += _emit_user_mcp(parent, config, identity, check=check)
+        pending += _emit_hermes(parent, config, identity, check=check)
 
     if check and pending:
         print(f"agentize: {pending} file(s) out of date — run: agentize mount", file=sys.stderr)
@@ -277,6 +290,13 @@ def _emit_user_mcp(root: Path, config, identity: Profile, *, check: bool) -> int
     return _print_plan(user_mcp_path().parent.parent, plan, check=check, prefix="[human] ")
 
 
+def _emit_hermes(root: Path, config, identity: Profile, *, check: bool) -> int:
+    if not hermes.hermes_enabled(config):
+        return 0
+    plan = hermes.plan_mcp(root, config, identity)
+    return _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
+
+
 def _mount_for_run(root: Path, config, identity: Profile) -> None:
     for plan in mount_plans(root, config, identity):
         for line in apply(root, plan):
@@ -287,6 +307,10 @@ def _mount_for_run(root: Path, config, identity: Profile) -> None:
     if cursor_user_mcp_enabled(config):
         wanted = collect_user_mcp_servers(root, config, identity)
         for line in apply(user_mcp_path().parent.parent, plan_user_mcp(wanted)):
+            print(f"  {line}", file=sys.stderr)
+    if hermes.hermes_enabled(config):
+        plan = hermes.plan_mcp(root, config, identity)
+        for line in apply(plan.root or root, plan):
             print(f"  {line}", file=sys.stderr)
 
 
@@ -327,7 +351,10 @@ def cmd_run(
     )
     _mount_for_run(root, config, identity)
     prepare(root, identity, host.name)
-    env = launch_env(dict(os.environ), root, identity, host.name)
+    servers = tuple(
+        bind_server_markers(server, root) for server in config.servers_for(identity)
+    )
+    env = launch_env(dict(os.environ), root, identity, host.name, servers=servers)
     if identity.origin == "agent":
         tools = ", ".join(identity.needs) or "mise.toml"
         print(f"agentize: ignite ensure ({tools})", file=sys.stderr)
@@ -358,6 +385,19 @@ def cmd_fetch(root: Path, *, host_name: str | None) -> int:
         print("agentize: no enabled host to fetch", file=sys.stderr)
         return 1
     for host in hosts:
+        if host.name == "hermes":
+            try:
+                binary = hermes.locate_binary()
+            except AgentizeError:
+                if host_name is not None:
+                    raise
+                print(
+                    "agentize: hermes: no download recipe; install Hermes itself",
+                    file=sys.stderr,
+                )
+                continue
+            print(f"agentize: hermes → {binary} (external install)")
+            continue
         binary = fetch_host(root, host)
         print(f"agentize: fetched {host.name} {host.pin} → {binary}")
     return 0

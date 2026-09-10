@@ -36,6 +36,7 @@ def _zip_with_binary(name: str, payload: bytes = b"#!/bin/sh\n") -> bytes:
 def test_cursor_on_path_means_the_agent_cli_not_the_ide():
     assert path_name("cursor") == "agent"
     assert path_name("opencode") == "opencode"
+    assert path_name("hermes") == "hermes"
 
 
 def test_archive_urls_are_https_and_pinned():
@@ -59,6 +60,45 @@ def test_archive_urls_are_https_and_pinned():
 def test_unknown_host_has_no_recipe():
     with pytest.raises(AgentizeError, match="no download recipe"):
         archive_url("claude", "1", "linux", "x64")
+    with pytest.raises(AgentizeError, match="no download recipe"):
+        archive_url("hermes", "1", "linux", "x64")
+
+
+def test_hermes_isolated_binary_locates_the_machine_install(tmp_path: Path, monkeypatch):
+    binary = tmp_path / "bin" / "hermes"
+    binary.parent.mkdir()
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr("agentize.hosts.hermes.shutil.which", lambda name: str(binary))
+    host = parse_config({"version": 1, "hosts": {"hermes": {}}}).hosts["hermes"]
+    assert isolated_binary(tmp_path, host) == binary
+
+
+def test_cli_fetch_skips_hermes_when_it_is_not_installed(
+    tmp_path: Path, capsys, monkeypatch
+):
+    (tmp_path / "agentize.yaml").write_text(
+        "version: 1\n"
+        "hosts:\n  hermes: {}\n  opencode:\n    pin: 1.2.3\n"
+        "profiles:\n  human:\n    default: true\n",
+        encoding="utf-8",
+    )
+
+    def get(url: str) -> bytes:
+        return _zip_with_binary("opencode")
+
+    monkeypatch.setattr(
+        "agentize.cli.fetch_host",
+        lambda root, host: fetch_host(root, host, os_name="linux", arch="x64", get=get),
+    )
+    def missing() -> Path:
+        raise AgentizeError("hermes is not on PATH")
+
+    monkeypatch.setattr("agentize.hosts.hermes.locate_binary", missing)
+
+    assert main(["-C", str(tmp_path), "fetch"]) == 0
+    err = capsys.readouterr().err
+    assert "hermes: no download recipe" in err
+    assert read_current_pin(tmp_path, "opencode") == "1.2.3"
 
 
 def test_platform_mapping_is_explicit():

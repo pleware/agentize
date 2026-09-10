@@ -12,7 +12,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from ..config import LspServer, McpServer
+from ..config import ENV_REF, LspServer, McpServer
 from ..resolve import ResolvedFile
 
 CONFIG_FILE = "opencode.json"
@@ -83,7 +83,16 @@ def mcp_entry(server: McpServer) -> dict[str, Any]:
 
     entry = {"type": "local", "command": list(server.command), "enabled": True}
     if server.env:
-        entry["environment"] = dict(server.env)
+        # OpenCode expands `$` in the file before JSON parse. A `${env:X}`
+        # whose value is a Windows path then becomes invalid JSON (`\m`).
+        # Refs are injected on the host process at launch instead.
+        literals = {
+            key: value
+            for key, value in server.env.items()
+            if ENV_REF.match(value.strip()) is None
+        }
+        if literals:
+            entry["environment"] = literals
     return entry
 
 

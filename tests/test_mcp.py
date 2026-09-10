@@ -160,8 +160,8 @@ def test_opencode_renders_local_and_remote(project: Path):
         "type": "local",
         "command": ["postgres-mcp", "--readonly"],
         "enabled": True,
-        "environment": {"DATABASE_URL": "${env:DATABASE_URL}"},
     }
+    assert "environment" not in servers["postgres"]
     assert servers["github"]["type"] == "remote"
     assert servers["github"]["url"] == "https://api.example.com/mcp"
 
@@ -287,3 +287,24 @@ def test_opencode_entry_for_a_server_without_env():
         {"version": 1, "mcp": {"servers": {"x": {"command": ["srv"]}}}}
     ).servers["x"]
     assert "environment" not in opencode.mcp_entry(server)
+
+
+def test_opencode_keeps_literal_env_and_drops_refs():
+    server = parse_config(
+        {
+            "version": 1,
+            "mcp": {
+                "servers": {
+                    "x": {
+                        "command": ["srv"],
+                        "env": {
+                            "LOG_LEVEL": "debug",
+                            "DATABASE_URL": "${env:DATABASE_URL}",
+                        },
+                    }
+                }
+            },
+        }
+    ).servers["x"]
+    entry = opencode.mcp_entry(server)
+    assert entry["environment"] == {"LOG_LEVEL": "debug"}
