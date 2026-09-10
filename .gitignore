@@ -27,3 +27,6 @@ graphify-out/
 /drafts/
 /docs/
 /tasks/
+
+# agentize-generated rules: per-instance, never commit.
+.cursor/rules/agentize.auto.generated*
