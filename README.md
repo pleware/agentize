@@ -100,12 +100,13 @@ of the user file stay. `hosts.cursor.user_mcp: false` turns this off.
 Last `mount` wins if two trees disagree. Two Cursor windows share one user
 file.
 
-Hermes uses the same `agentize-` prefix inside a dedicated profile
-(`<hermes-root>/profiles/agentize-<identity>/config.yaml`, or the project's
-`.agentize/hosts/hermes/data/<identity>/` when `isolate_data` is on).
-The root is the first existing of `%LOCALAPPDATA%/hermes` (Windows) then
-`~/.hermes`. `cleanup --home` removes those profile directories. The
-default Hermes Desktop home is not rewritten.
+Hermes uses the same `agentize-` prefix inside a dedicated Desktop profile
+(`<hermes-root>/profiles/agentize-<label>/config.yaml`). `mount` writes every
+declared profile and agent slug: `profiles.human` → `agentize-human`,
+`agents.default` → `agentize-agent`. `isolate_data` does not hide the bot
+from Desktop. The root is the first existing of `%LOCALAPPDATA%/hermes`
+(Windows) then `~/.hermes`. `cleanup --home` removes those profile
+directories. The default Hermes Desktop home is not rewritten.
 
 ### Launchers
 
@@ -296,7 +297,6 @@ worktree:
         current              pointer (text, not a symlink)
         data/                isolated OpenCode database
       cursor/                same shape; the binary inside is the agent CLI
-      hermes/data/<identity>/ isolated bot profile (`isolate_data`)
   .agents/             rules and project-owned skills — commit these
 
 ~/.agentize/           # or $AGENTIZE_HOME — machine, not the project

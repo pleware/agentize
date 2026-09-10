@@ -284,9 +284,10 @@ def test_hermes_launch_sets_profile_home(tmp_path: Path, monkeypatch):
     assert env["HERMES_HOME"] == str(tmp_path / ".hermes" / "profiles" / "agentize-human")
 
 
-def test_isolated_hermes_uses_project_data(tmp_path: Path):
+def test_isolated_hermes_uses_desktop_profile(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("agentize.hosts.hermes.user_hermes_root", lambda: tmp_path / ".hermes")
     env = launch_env({}, tmp_path, AGENT, "hermes")
-    assert env["HERMES_HOME"] == str(host_data_dir(tmp_path, "hermes") / "agent")
+    assert env["HERMES_HOME"] == str(tmp_path / ".hermes" / "profiles" / "agentize-agent")
 
 
 def test_prepare_creates_the_hermes_profile_dir(tmp_path: Path, monkeypatch):

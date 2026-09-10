@@ -44,16 +44,23 @@ def servers(text: str) -> dict:
     return hermes.servers_from(text)
 
 
+def isolate_hermes_home(monkeypatch, root: Path) -> Path:
+    """Keep drop_stale off the machine Desktop home during tests."""
+    root.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(hermes, "user_hermes_root", lambda: root)
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (root,))
+    return root
+
+
 def test_hermes_renders_stdio_and_remote(tmp_path: Path, monkeypatch):
-    home = tmp_path / "home"
-    monkeypatch.setattr(hermes, "user_hermes_root", lambda: home / ".hermes")
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(project / "agentize.yaml", CONFIG)
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
     assert main(["-C", str(project), "mount"]) == 0
 
-    target = home / ".hermes" / "profiles" / f"{PREFIX}human" / "config.yaml"
+    target = home / "profiles" / f"{PREFIX}human" / "config.yaml"
     data = servers(target.read_text(encoding="utf-8"))
     assert data[f"{PREFIX}postgres"] == {
         "command": "postgres-mcp",
@@ -68,26 +75,57 @@ def test_hermes_renders_stdio_and_remote(tmp_path: Path, monkeypatch):
     assert "${env:DATABASE_URL}" in raw
 
 
-def test_agent_profile_writes_into_project_data(tmp_path: Path, monkeypatch):
-    monkeypatch.setattr(hermes, "user_hermes_root", lambda: tmp_path / "unused")
+def test_agent_profile_writes_into_desktop_home(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(project / "agentize.yaml", CONFIG)
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
     assert main(["-C", str(project), "mount", "--profile", "agent"]) == 0
 
-    target = project / ".agentize" / "hosts" / "hermes" / "data" / "agent" / "config.yaml"
+    target = home / "profiles" / f"{PREFIX}agent" / "config.yaml"
     assert sorted(servers(target.read_text(encoding="utf-8"))) == [f"{PREFIX}postgres"]
-    assert not (tmp_path / "unused").exists()
+    assert not (project / ".agentize" / "hosts" / "hermes").exists()
+
+
+def test_bare_mount_plants_human_and_default_agent(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(
+        project / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n  hermes: {}\n"
+        "profiles:\n"
+        "  human:\n    default: true\n    mcp: [postgres, github]\n"
+        "agents:\n"
+        "  default:\n    isolate_data: true\n    mcp: [postgres]\n"
+        "mcp:\n"
+        "  servers:\n"
+        "    postgres:\n      command: [postgres-mcp]\n"
+        "    github:\n      url: https://api.example.com/mcp\n",
+    )
+    write(project / ".agents" / "shared" / "style.mdc", "style\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    human = home / "profiles" / f"{PREFIX}human" / "config.yaml"
+    agent = home / "profiles" / f"{PREFIX}agent" / "config.yaml"
+    assert sorted(servers(human.read_text(encoding="utf-8"))) == [
+        f"{PREFIX}github",
+        f"{PREFIX}postgres",
+    ]
+    assert sorted(servers(agent.read_text(encoding="utf-8"))) == [f"{PREFIX}postgres"]
+    assert not (home / "profiles" / f"{PREFIX}default").exists()
+    assert not (project / ".agentize" / "hosts" / "hermes").exists()
 
 
 def test_unrelated_hermes_servers_are_preserved(tmp_path: Path, monkeypatch):
-    home = tmp_path / "home"
-    monkeypatch.setattr(hermes, "user_hermes_root", lambda: home / ".hermes")
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(project / "agentize.yaml", CONFIG)
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
-    dest = home / ".hermes" / "profiles" / f"{PREFIX}human"
+    dest = home / "profiles" / f"{PREFIX}human"
     write(
         dest / "config.yaml",
         yaml.safe_dump(
@@ -107,8 +145,7 @@ def test_unrelated_hermes_servers_are_preserved(tmp_path: Path, monkeypatch):
 
 
 def test_switching_profile_drops_stale_prefixed_keys(tmp_path: Path, monkeypatch):
-    home = tmp_path / "home"
-    monkeypatch.setattr(hermes, "user_hermes_root", lambda: home / ".hermes")
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(
         project / "agentize.yaml",
@@ -126,7 +163,7 @@ def test_switching_profile_drops_stale_prefixed_keys(tmp_path: Path, monkeypatch
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
     assert main(["-C", str(project), "mount"]) == 0
-    dest = home / ".hermes" / "profiles" / f"{PREFIX}human" / "config.yaml"
+    dest = home / "profiles" / f"{PREFIX}human" / "config.yaml"
     assert f"{PREFIX}github" in servers(dest.read_text(encoding="utf-8"))
 
     write(
@@ -146,8 +183,7 @@ def test_switching_profile_drops_stale_prefixed_keys(tmp_path: Path, monkeypatch
 
 
 def test_disabled_host_writes_nothing(tmp_path: Path, monkeypatch):
-    home = tmp_path / "home"
-    monkeypatch.setattr(hermes, "user_hermes_root", lambda: home / ".hermes")
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(
         project / "agentize.yaml",
@@ -158,7 +194,7 @@ def test_disabled_host_writes_nothing(tmp_path: Path, monkeypatch):
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
     assert main(["-C", str(project), "mount"]) == 0
-    assert not (home / ".hermes").exists()
+    assert not (home / "profiles").exists()
 
 
 def test_a_single_word_command_emits_no_args():

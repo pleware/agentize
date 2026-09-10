@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from agentize.cli import main
+from agentize.hosts import hermes
 from agentize.session import LastRun, remember
 from agentize.store_tree import data_dir, ensure_data_dir
 from agentize.wrapper import FILES, PS1_NAME, write_wrappers
@@ -89,6 +90,7 @@ def test_home_flag_removes_the_user_tree(tmp_path: Path, monkeypatch):
     project = tmp_path / "proj"
     project.mkdir()
     monkeypatch.setenv("AGENTIZE_HOME", str(home))
+    monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (tmp_path / "hermes",))
     remember(project, LastRun(host="opencode", profile="human"))
 
     assert main(["-C", str(project), "--cleanup", "--home"]) == 0

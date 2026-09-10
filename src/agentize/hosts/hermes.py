@@ -4,16 +4,17 @@ Hermes has no project ``mcp.json``. It reads ``mcp_servers`` from
 ``$HERMES_HOME/config.yaml``. agentize therefore writes a dedicated profile
 directory and sets ``HERMES_HOME`` on launch.
 
-A human without ``isolate_data`` gets
-``<hermes-root>/profiles/agentize-<name>/``. The root is the first existing
-directory among the platform-native home (``%LOCALAPPDATA%/hermes`` on
-Windows) and ``~/.hermes``. An isolated identity (a bot) gets a directory
-under the project's ``.agentize/hosts/hermes/data/`` so it does not share
-the user's Desktop home.
+Every identity lands under ``<hermes-root>/profiles/agentize-<label>/``.
+The root is the first existing directory among the platform-native home
+(``%LOCALAPPDATA%/hermes`` on Windows) and ``~/.hermes``. ``isolate_data``
+does not move a Hermes profile into the project — Desktop must see the
+bot next to the human. The default agent slug is labelled ``agent``, so
+``agents.default`` becomes ``agentize-agent``.
 
-Only keys prefixed ``agentize-`` are owned. Catalog entries and hand-edited
-servers stay. ``fetch`` does not download Hermes — it locates the machine
-install.
+``mount`` plants every declared profile and agent slug, not only the
+current identity. Only keys prefixed ``agentize-`` are owned. Catalog
+entries and hand-edited servers stay. ``fetch`` does not download Hermes
+— it locates the machine install.
 """
 
 from __future__ import annotations
@@ -26,10 +27,9 @@ from typing import Any
 
 import yaml
 
-from ..config import Config, McpServer, Profile
+from ..config import DEFAULT_AGENT, Config, McpServer, Profile
 from ..errors import AgentizeError, MountError
 from ..mount import Plan, Write
-from ..store_tree import host_data_dir
 from ..user_mcp import PREFIX, collect_user_mcp_servers
 
 CONFIG_FILE = "config.yaml"
@@ -77,13 +77,34 @@ def hermes_enabled(config: Config) -> bool:
 
 
 def profile_dir_name(identity: Profile) -> str:
+    if identity.origin == "agent" and identity.name == DEFAULT_AGENT:
+        return f"{PREFIX}agent"
     return f"{PREFIX}{identity.name}"
 
 
 def profile_home(project_root: Path, identity: Profile) -> Path:
-    if identity.isolate_data:
-        return host_data_dir(project_root, "hermes") / identity.name
+    """Desktop profile directory. ``project_root`` is unused (kept for callers)."""
     return user_hermes_root() / PROFILES_DIR / profile_dir_name(identity)
+
+
+def hermes_identities(config: Config) -> tuple[Profile, ...]:
+    """Every profile and agent slug, unique by Desktop directory name."""
+    seen: set[str] = set()
+    out: list[Profile] = []
+    for identity in config.profiles.values():
+        key = profile_dir_name(identity)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(identity)
+    for slug in config.agents:
+        identity = config.resolve_agent(slug)
+        key = profile_dir_name(identity)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(identity)
+    return tuple(out)
 
 
 def apply_root(project_root: Path, dest: Path) -> Path:
@@ -187,7 +208,10 @@ def strip_agentize_profiles(*, root: Path | None = None) -> tuple[Path, ...]:
             continue
         for child in sorted(base.iterdir()):
             if child.is_dir() and child.name.startswith(PREFIX):
-                shutil.rmtree(child)
+                try:
+                    shutil.rmtree(child)
+                except OSError:
+                    continue
                 removed.append(child)
     return tuple(removed)
 
@@ -201,7 +225,10 @@ def drop_stale_named_profiles(identity: Profile, keep: Path) -> tuple[Path, ...]
         stale = home / PROFILES_DIR / name
         if stale.resolve() == keep_key or not stale.is_dir():
             continue
-        shutil.rmtree(stale)
+        try:
+            shutil.rmtree(stale)
+        except OSError:
+            continue
         removed.append(stale)
     return tuple(removed)
 

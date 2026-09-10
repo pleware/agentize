@@ -259,7 +259,7 @@ def cmd_mount(
             check=check,
         )
         pending += _emit_user_mcp(root, config, identity, check=check)
-        pending += _emit_hermes(root, config, identity, check=check)
+        pending += _emit_hermes(root, config, check=check)
     else:
         parent = find_inherit_root(root)
         if parent is None:
@@ -274,7 +274,7 @@ def cmd_mount(
             check=check,
         )
         pending += _emit_user_mcp(parent, config, identity, check=check)
-        pending += _emit_hermes(parent, config, identity, check=check)
+        pending += _emit_hermes(parent, config, check=check)
 
     if check and pending:
         print(f"agentize: {pending} file(s) out of date — run: agentize mount", file=sys.stderr)
@@ -290,16 +290,20 @@ def _emit_user_mcp(root: Path, config, identity: Profile, *, check: bool) -> int
     return _print_plan(user_mcp_path().parent.parent, plan, check=check, prefix="[human] ")
 
 
-def _emit_hermes(root: Path, config, identity: Profile, *, check: bool) -> int:
+def _emit_hermes(root: Path, config, *, check: bool) -> int:
     if not hermes.hermes_enabled(config):
         return 0
-    plan = hermes.plan_mcp(root, config, identity)
-    code = _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
-    if not check:
-        keep = hermes.profile_home(root, identity)
-        for path in hermes.drop_stale_named_profiles(identity, keep):
-            print(f"  remove stale {path}")
-    return code
+    pending = 0
+    for who in hermes.hermes_identities(config):
+        plan = hermes.plan_mcp(root, config, who)
+        pending += _print_plan(
+            root, plan, check=check, prefix=f"[{hermes.profile_dir_name(who)}] "
+        )
+        if not check:
+            keep = hermes.profile_home(root, who)
+            for path in hermes.drop_stale_named_profiles(who, keep):
+                print(f"  remove stale {path}")
+    return pending
 
 
 def _mount_for_run(root: Path, config, identity: Profile) -> None:
@@ -314,12 +318,13 @@ def _mount_for_run(root: Path, config, identity: Profile) -> None:
         for line in apply(user_mcp_path().parent.parent, plan_user_mcp(wanted)):
             print(f"  {line}", file=sys.stderr)
     if hermes.hermes_enabled(config):
-        plan = hermes.plan_mcp(root, config, identity)
-        for line in apply(plan.root or root, plan):
-            print(f"  {line}", file=sys.stderr)
-        keep = hermes.profile_home(root, identity)
-        for path in hermes.drop_stale_named_profiles(identity, keep):
-            print(f"  remove stale {path}", file=sys.stderr)
+        for who in hermes.hermes_identities(config):
+            plan = hermes.plan_mcp(root, config, who)
+            for line in apply(plan.root or root, plan):
+                print(f"  {line}", file=sys.stderr)
+            keep = hermes.profile_home(root, who)
+            for path in hermes.drop_stale_named_profiles(who, keep):
+                print(f"  remove stale {path}", file=sys.stderr)
 
 
 def cmd_run(
