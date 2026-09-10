@@ -439,6 +439,41 @@ def test_a_cursor_scoped_skill_does_not_fail_hermes(tmp_path: Path, monkeypatch)
     assert not (profile / "skills" / "agentize.auto.generated.graphify").exists()
 
 
+def test_per_host_skill_selection(tmp_path: Path, monkeypatch):
+    home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
+    project = tmp_path / "proj"
+    write(
+        project / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n"
+        "  cursor:\n    emit_prefix: agentize.auto.generated.\n"
+        "  hermes: {}\n"
+        "profiles:\n"
+        "  human:\n    default: true\n    mcp: [postgres]\n"
+        "    skills:\n"
+        "      cursor: [graphify]\n"
+        "      hermes: [review]\n"
+        "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
+    )
+    write(
+        project / ".agents" / "hosts" / "cursor" / "skills" / "graphify" / "SKILL.md",
+        "# cursor\n",
+    )
+    write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
+
+    assert main(["-C", str(project), "mount"]) == 0
+
+    # Cursor narrows to graphify (its own layer), Hermes to review (shared).
+    assert (
+        project / ".cursor" / "skills" / "agentize.auto.generated.graphify" / "SKILL.md"
+    ).is_file()
+    assert not (project / ".cursor" / "skills" / "agentize.auto.generated.review").exists()
+    profile = home / "profiles" / f"{PREFIX}human"
+    assert (profile / "skills" / "agentize.auto.generated.review" / "SKILL.md").is_file()
+    assert not (profile / "skills" / "agentize.auto.generated.graphify").exists()
+
+
 def test_hermes_emit_prefix_names_the_skill_directory(tmp_path: Path, monkeypatch):
     home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"

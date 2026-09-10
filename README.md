@@ -232,13 +232,25 @@ Each host receives its own copy, in a directory only that host reads: `.cursor/s
 
 <small>A <code>SKILL.md</code> from one layer describing helper files from another is not a skill anybody wrote. agentize never writes into <code>.agents/skills</code>, <code>.claude/skills</code> or <code>.codex/skills</code>, which several hosts scan in common — so a skill intended for one host cannot be picked up by another, and there is nothing to clean up after the fact. agentize copies skills the project already owns. It does not fetch them — <code>npx skills</code> and the host marketplaces do that.</small>
 
-A profile or agent slug can narrow the set:
+A profile or agent slug can narrow the set, per host:
 
 ```yaml
 agents:
   default:
-    skills: [review]     # omit the key to get every skill the layers resolve
+    skills: [review]      # one list narrows every host the same way
+    # or per host — a host not listed keeps every resolved skill:
+    # skills:
+    #   cursor: [review]
+    #   hermes: [review, deploy]
 ```
+
+A flat list is shorthand for `*` (every host). A mapping keys the host name
+to that host's list; a host the mapping does not mention is not narrowed, so
+it receives every skill its layers resolve. An empty list (`skills: []`, or a
+host mapped to `[]`) means "every resolved skill", not "none". A name in the
+selection that no layer provides anywhere still fails the mount — but a skill
+scoped to another host's `hosts/<host>/skills/` layer only narrows that other
+host to nothing and never fails it.
 
 ## Configuration
 

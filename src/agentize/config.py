@@ -103,13 +103,25 @@ class Profile:
     isolate_data: bool = False
     git: GitIdentity | None = None
     mcp: tuple[str, ...] = ()
-    skills: tuple[str, ...] = ()
+    skills: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    """Skill selection, keyed by host name. ``*`` is the fallback for every
+    host without its own key. A key maps to the names that narrow that host's
+    skills; an empty tuple means every resolved skill (no narrowing)."""
+
     lsp: LspChoice = field(default_factory=LspChoice)
     needs: tuple[str, ...] = ()
     """mise tool names (`php@7.4`) to install on `run`. Empty for a human."""
     origin: str = "profile"
     """`profile` reads `.agents/profiles/<name>/`. `agent` reads
     `.agents/agents/default/` then `.agents/agents/<name>/`."""
+
+    def skills_for(self, host: str) -> tuple[str, ...]:
+        """The skill selection for one host: the host's own key wins, ``*``
+        is the shared default, and an absent key means every resolved skill."""
+        per = self.skills.get(host)
+        if per is not None:
+            return per
+        return self.skills.get("*", ())
 
 
 @dataclass(frozen=True)
@@ -120,7 +132,7 @@ class AgentSpec:
     isolate_data: bool = False
     git: GitIdentity | None = None
     mcp: tuple[str, ...] = ()
-    skills: tuple[str, ...] = ()
+    skills: dict[str, tuple[str, ...]] = field(default_factory=dict)
     lsp: LspChoice = field(default_factory=LspChoice)
     needs: tuple[str, ...] = ()
 
@@ -439,7 +451,7 @@ def _parse_profiles(raw: Any, origin: str) -> dict[str, Profile]:
             isolate_data=bool(body.get("isolate_data", False)),
             git=_parse_git(body.get("git"), f"{where}.git"),
             mcp=_str_list(body.get("mcp"), f"{where}.mcp"),
-            skills=_str_list(body.get("skills"), f"{where}.skills"),
+            skills=_parse_skill_sets(body.get("skills"), f"{where}.skills"),
             lsp=_parse_lsp_choice(body.get("lsp"), f"{where}.lsp")
             if "lsp" in body
             else LSP_OFF,
@@ -468,7 +480,7 @@ def _parse_agents(raw: Any, origin: str) -> dict[str, AgentSpec]:
             isolate_data=bool(body.get("isolate_data", False)),
             git=_parse_git(body.get("git"), f"{where}.git") if "git" in body else None,
             mcp=_str_list(body.get("mcp"), f"{where}.mcp"),
-            skills=_str_list(body.get("skills"), f"{where}.skills"),
+            skills=_parse_skill_sets(body.get("skills"), f"{where}.skills"),
             lsp=_parse_lsp_choice(body.get("lsp"), f"{where}.lsp")
             if "lsp" in body
             else LSP_OFF,
@@ -751,6 +763,23 @@ def _str_list(value: Any, where: str) -> tuple[str, ...]:
     if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
         raise ConfigError(f"{where}: expected a list of strings")
     return tuple(value)
+
+
+def _parse_skill_sets(value: Any, where: str) -> dict[str, tuple[str, ...]]:
+    """Skill selection: a flat list applies to every host, a mapping names
+    each host. ``*`` is the explicit "every host" key in the mapping form."""
+    if value is None:
+        return {}
+    if isinstance(value, list):
+        return {"*": _str_list(value, where)}
+    if isinstance(value, dict):
+        sets: dict[str, tuple[str, ...]] = {}
+        for host, names in value.items():
+            if not isinstance(host, str):
+                raise ConfigError(f"{where}: host names must be strings")
+            sets[host] = _str_list(names, f"{where}.{host}")
+        return sets
+    raise ConfigError(f"{where}: expected a list of names or a mapping of host names")
 
 
 def _str_map(value: Any, where: str) -> dict[str, str]:

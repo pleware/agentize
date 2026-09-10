@@ -117,7 +117,7 @@ def _plan_host_skills(
     emitted: dict[str, skills.Emitted] = {}
     for identity in identities:
         resolved = resolve(config, disk_by_listing, host=host, identity=identity)
-        selected = identity.skills
+        selected = identity.skills_for(host)
         missing = tuple(sorted(name for name in selected if name not in known))
         if missing:
             raise MountError(
