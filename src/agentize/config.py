@@ -22,7 +22,7 @@ REFERENCE = re.compile(r"\$\{[^}]+\}")
 ENV_REF = re.compile(r"^\$\{env:([^}]+)\}$")
 SECRET_HINTS = ("token", "secret", "password", "passwd", "credential", "auth", "api_key", "apikey")
 NEED_TOOL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:@+-]*$")
-INHERIT_CHANNELS = frozenset({"mcp"})
+INHERIT_CHANNELS = frozenset({"mcp", "skills"})
 
 # Every key the parser reads. A key outside these sets is a typo, not a
 # forward-compatible extension: `isolat_data` would silently leave the
@@ -141,9 +141,8 @@ class AgentSpec:
 class InheritSpec:
     """What a nested checkout takes from the observed parent.
 
-    Missing key → inherit every planted channel (today: MCP).
-    ``false`` or ``[]`` → refuse.
-    ``[mcp]`` → only those channels.
+    Missing key → inherit MCP only (skills are opt-in). ``false`` or ``[]`` →
+    refuse. ``[mcp, skills]`` → only those channels.
     """
 
     refuse: bool = False
@@ -157,7 +156,12 @@ class InheritSpec:
         return channel in self.channels
 
 
-INHERIT_DEFAULT = InheritSpec()
+INHERIT_DEFAULT = InheritSpec(channels=("mcp",))
+"""Omitted `inherit` pulls MCP only. Skills are opt-in: a child must name
+`skills` in `inherit` to pull ancestor skills, because a catalog at the
+parent can be large and rarely wanted wholesale. MCP keeps its existing
+opt-out behaviour."""
+
 INHERIT_REFUSE = InheritSpec(refuse=True)
 
 

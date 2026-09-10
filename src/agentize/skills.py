@@ -129,14 +129,24 @@ def known_skill_names(units: Iterable[str]) -> frozenset[str]:
     compares the identity's `skills` selection against this set, not against
     one host's resolved view.
     """
-    names: set[str] = set()
-    for raw in units:
-        unit = raw.replace("\\", "/")
-        if unit.startswith(f"{SEGMENT}/"):
-            names.add(unit[len(SEGMENT) + 1 :].split("/", 1)[0])
-        elif f"/{SEGMENT}/" in unit:
-            names.add(unit.split(f"/{SEGMENT}/", 1)[1].split("/", 1)[0])
-    return frozenset(names)
+    return frozenset(name for unit in units if (name := skill_name(unit)) is not None)
+
+
+def skill_name(unit: str) -> str | None:
+    """The authored name of one skill unit, or `None` if it is not a skill.
+
+    A unit is a directory holding `SKILL.md` (see `skill_units`), spelled as
+    `skills/<name>`, `shared/skills/<name>`, `hosts/<host>/skills/<name>`,
+    `profiles/<p>/skills/<name>`, or `agents/<a>/skills/<name>`.
+    """
+    clean = unit.replace("\\", "/")
+    if clean.startswith(f"{SEGMENT}/"):
+        name = clean[len(SEGMENT) + 1 :].split("/", 1)[0]
+    elif f"/{SEGMENT}/" in clean:
+        name = clean.split(f"/{SEGMENT}/", 1)[1].split("/", 1)[0]
+    else:
+        return None
+    return name or None
 
 
 def stale_dir_names(existing: Iterable[str], wanted: Iterable[str], prefix: str) -> tuple[str, ...]:

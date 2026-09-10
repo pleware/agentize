@@ -11,8 +11,17 @@ from dataclasses import dataclass, replace
 from pathlib import Path
 
 from . import skills
-from .ancestry import cascade_rules
-from .config import Config, LspServer, McpServer, Profile, identity_label
+from .ancestry import cascade_rules, observed_parents
+from .config import (
+    CONFIG_NAME,
+    Config,
+    ConfigError,
+    LspServer,
+    McpServer,
+    Profile,
+    identity_label,
+    load_config,
+)
 from .errors import MountError
 from .hosts import agents_md, cursor, opencode
 from .markers import bind_server_markers
@@ -93,6 +102,31 @@ def plan_host_skills_all(
     )
 
 
+def _ancestor_skill_dirs(project_root: Path) -> dict[str, Path]:
+    """Skill directories the observed ancestors contribute, nearest first.
+
+    A name the nearer ancestor already owns is not overwritten, so the nearest
+    owner wins. Only the directory is returned — the caller applies the
+    identity's per-host selection and lets the project's own skills shadow
+    these on a name collision.
+    """
+    merged: dict[str, Path] = {}
+    for parent in observed_parents(project_root):
+        config_file = parent.root / CONFIG_NAME
+        if not config_file.is_file():
+            continue
+        try:
+            config = load_config(config_file)
+        except ConfigError:
+            continue
+        source = parent.root / config.source
+        for unit in skills.skill_units(list_files(source)):
+            name = skills.skill_name(unit)
+            if name is not None:
+                merged.setdefault(name, (source / unit).resolve())
+    return merged
+
+
 def _plan_host_skills(
     project_root: Path,
     config: Config,
@@ -112,11 +146,23 @@ def _plan_host_skills(
     units = skills.skill_units(list_files(source_root))
     disk_by_listing = skills.skill_resolve_map(units)
     known = skills.known_skill_names(units)
+    inherited = _ancestor_skill_dirs(project_root) if config.inherit.allows("skills") else {}
+    known = known | frozenset(inherited)
     qualify = len(identities) > 1
 
     emitted: dict[str, skills.Emitted] = {}
     for identity in identities:
         resolved = resolve(config, disk_by_listing, host=host, identity=identity)
+        if inherited:
+            own = {item.key for item in resolved}
+            resolved = (
+                *resolved,
+                *(
+                    ResolvedFile(key=f"skills/{name}", path=str(path), layer="inherited")
+                    for name, path in inherited.items()
+                    if f"skills/{name}" not in own
+                ),
+            )
         selected = identity.skills_for(host)
         missing = tuple(sorted(name for name in selected if name not in known))
         if missing:

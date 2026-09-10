@@ -63,8 +63,12 @@ plants inherited Cursor MCP into every existing child (then each child's own
 
 A child listed in `mani.yaml` does not need `agentize.yaml`. Membership plus
 an observed parent is enough. Child policy merges on top (child wins).
-`inherit: []` or `inherit: false` refuses. `inherit: [mcp]` keeps only that
-channel.
+`inherit: []` or `inherit: false` refuses. `inherit: [mcp]` keeps only MCP;
+`inherit: [mcp, skills]` also pulls ancestor skills. **Skills are opt-in** —
+a child must name `skills` to inherit them, while MCP stays on by default,
+because a parent's skill catalog is usually too large to inherit wholesale.
+Inherited skills resolve like the project's own: the nearest owner wins on a
+name, and `profiles.<name>.skills` (per host) filters what each host copies.
 
 Relative `--directory`, `-C`, and `--project` are resolved from the
 `agentize.yaml` that **declared** the server, then rewritten to the plant

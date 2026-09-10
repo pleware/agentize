@@ -15,7 +15,15 @@ from pathlib import Path
 import yaml
 
 from .ancestry import ObservedParent, cascade_rules, observed_parents
-from .config import CONFIG_NAME, Config, InheritSpec, McpServer, Profile, load_config
+from .config import (
+    CONFIG_NAME,
+    INHERIT_DEFAULT,
+    Config,
+    InheritSpec,
+    McpServer,
+    Profile,
+    load_config,
+)
 from .errors import AgentizeError
 from .hosts import cursor
 from .mani import child_dirs, load_mani
@@ -113,7 +121,7 @@ def load_child_config(root: Path) -> Config | None:
 
 def inherit_spec(root: Path) -> InheritSpec:
     child = load_child_config(root)
-    return child.inherit if child is not None else InheritSpec()
+    return child.inherit if child is not None else INHERIT_DEFAULT
 
 
 def overlay_config(parent: Config, child: Config) -> Config:

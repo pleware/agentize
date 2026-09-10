@@ -263,3 +263,63 @@ def test_mount_check_writes_nothing(tmp_path: Path):
     assert not (ws / "AGENTS.md").exists()
     assert not (erp / ".agentize").exists()
     assert not (erp / ".cursor").exists()
+
+
+CHILD_INHERIT_SKILLS = (
+    "version: 1\n"
+    "source: .agents\n"
+    "hosts:\n  cursor: {}\n"
+    "inherit: [skills]\n"
+    "profiles:\n  human:\n    default: true\n"
+)
+
+
+def test_inherit_skills_pulls_parent_skills(tmp_path: Path):
+    ws = tmp_path / "ws"
+    child = ws / "child"
+    write(ws / "agentize.yaml", PARENT)
+    write(ws / ".agents" / "skills" / "review" / "SKILL.md", "# parent review\n")
+    write(child / "agentize.yaml", CHILD_INHERIT_SKILLS)
+    mani_projects(ws, child="child")
+
+    assert main(["-C", str(child), "mount"]) == 0
+
+    emitted = child / ".cursor" / "skills" / "agentize.auto.generated.review" / "SKILL.md"
+    assert emitted.read_text(encoding="utf-8") == "# parent review\n"
+
+
+def test_inherit_default_excludes_skills(tmp_path: Path):
+    ws = tmp_path / "ws"
+    child = ws / "child"
+    write(ws / "agentize.yaml", PARENT)
+    write(ws / ".agents" / "skills" / "review" / "SKILL.md", "# parent review\n")
+    write(
+        child / "agentize.yaml",
+        "version: 1\nsource: .agents\nhosts:\n  cursor: {}\n"
+        "profiles:\n  human:\n    default: true\n",
+    )
+    mani_projects(ws, child="child")
+
+    assert main(["-C", str(child), "mount"]) == 0
+    assert not (child / ".cursor" / "skills" / "agentize.auto.generated.review").exists()
+
+
+def test_child_skill_shadows_inherited_parent_skill(tmp_path: Path):
+    ws = tmp_path / "ws"
+    child = ws / "child"
+    write(ws / "agentize.yaml", PARENT)
+    write(ws / ".agents" / "skills" / "review" / "SKILL.md", "# parent\n")
+    write(ws / ".agents" / "skills" / "deploy" / "SKILL.md", "# parent deploy\n")
+    write(child / "agentize.yaml", CHILD_INHERIT_SKILLS)
+    write(child / ".agents" / "skills" / "review" / "SKILL.md", "# child\n")
+    mani_projects(ws, child="child")
+
+    assert main(["-C", str(child), "mount"]) == 0
+
+    skills_root = child / ".cursor" / "skills"
+    assert (skills_root / "agentize.auto.generated.review" / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == "# child\n"
+    assert (skills_root / "agentize.auto.generated.deploy" / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == "# parent deploy\n"
