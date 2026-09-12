@@ -43,7 +43,7 @@ To change a generated rule, edit the source file, then run
 `agentize mount`. Do not patch the emitted copy.
 
 Agentize also copies skills into `.cursor/skills/` and `.opencode/skills/`
-(prefixed `auto.`). Leave those directories alone too.
+(prefixed `agentize.auto.generated.`). Leave those directories alone too.
 """
 
 SKILLS_DIR = ".cursor/skills"
