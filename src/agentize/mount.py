@@ -467,13 +467,17 @@ def _plan_agents_md(
         for identity in identities
     )
     target = project_root / agents_md.FILE
-    existing = target.read_text(encoding="utf-8") if target.is_file() else ""
+    existing_bytes = target.read_bytes() if target.is_file() else b""
+    use_crlf = b"\r\n" in existing_bytes
+    existing = existing_bytes.decode("utf-8")
     block = (
         agents_md.render_block_all(groups, config.source)
         if qualify
         else agents_md.render_block(groups[0][1], config.source)
     )
     content = agents_md.merge(existing, block)
+    if use_crlf:
+        content = content.replace("\n", "\r\n")
     rule_count = sum(len(agents_md.rules(items)) for _heading, items in groups)
     if qualify:
         label = (

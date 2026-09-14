@@ -124,6 +124,16 @@ def test_existing_prose_survives_a_mount(project: Path):
     assert agents_md.BEGIN in text
 
 
+def test_crlf_line_endings_are_preserved(project: Path):
+    write(project / "AGENTS.md", "# House rules\r\n\r\nRead this first.\r\n")
+
+    main(["-C", str(project), "mount"])
+
+    text = (project / "AGENTS.md").read_bytes().decode("utf-8")
+    assert "\r\n" in text
+    assert "\n" not in text.replace("\r\n", "")
+
+
 def test_opencode_lists_the_winning_files_only(project: Path):
     write(project / ".agents" / "profiles" / "human" / "core" / "style.mdc", "human\n")
 
