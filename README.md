@@ -7,6 +7,12 @@
 
 One project config. Every agent host.
 
+agentize turns that one file into the native config each host expects —
+Cursor's `.cursor/mcp.json` plus rules and skills, OpenCode's `opencode.json`,
+and a dedicated Hermes profile home. It does not install a toolchain
+([ignite](https://github.com/pleware/ignite) does) and it does not decide
+which skills may fire ([skillize](https://github.com/pleware/skillize) does).
+
 <small>Status: Cursor, OpenCode, and Hermes work. Claude Code and Codex are deferred. <code>run</code> starts the project's isolated copy of a host, not whatever happens to be on <code>PATH</code> — except Hermes, which uses the machine install and a dedicated profile home. Cursor and OpenCode track <code>latest</code> and update themselves after the first <code>fetch</code>. <code>run --agent</code> also plants <a href="https://github.com/pleware/ignite">ignite</a> and installs that slug's <code>needs</code> from <code>mise.toml</code>.</small>
 
 ## Install
