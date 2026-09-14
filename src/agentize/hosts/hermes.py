@@ -13,9 +13,9 @@ bot next to the human. The default agent slug is labelled ``agent``, so
 
 ``mount`` plants every declared profile and agent slug, not only the
 current identity. Only keys prefixed ``agentize-`` are owned. Catalog
-entries and hand-edited servers stay. Skills go into that same profile
-``skills/`` tree under the host ``emit_prefix`` (default ``agentize.auto.generated.``), so
-bundled Hermes skills are not pruned. ``fetch`` does not download Hermes
+entries and hand-edited servers stay. Skills go into that same profile's
+``skills/`` tree under the ``agentize/`` category, so bundled Hermes skills
+are not pruned. ``fetch`` does not download Hermes
 — it locates the machine install.
 """
 
@@ -29,7 +29,6 @@ from typing import Any
 
 import yaml
 
-from .. import skills
 from ..config import Config, McpServer, Profile, identity_label
 from ..errors import AgentizeError, MountError
 from ..mount import Plan, Write, plan_host_skills
@@ -39,6 +38,11 @@ CONFIG_FILE = "config.yaml"
 MCP_KEY = "mcp_servers"
 PROFILES_DIR = "profiles"
 SKILLS_DIR = "skills"
+SKILLS_CATEGORY = "agentize"
+"""The category directory under ``skills/`` that owns every agentize-emitted
+skill. Hermes groups skills as ``<category>/<name>``, so the flat
+``agentize.auto.generated.<name>`` prefix would read as twenty-odd single-skill
+categories. A single ``agentize/`` category keeps folder and ``name`` aligned."""
 
 
 def _user_home() -> Path:
@@ -154,11 +158,6 @@ def read_yaml(path: Path) -> dict[str, Any]:
     return data
 
 
-def skills_prefix(config: Config) -> str:
-    host = config.hosts.get("hermes")
-    return (host.emit_prefix if host else "") or skills.DEFAULT_PREFIX
-
-
 def plan_mcp(project_root: Path, config: Config, identity: Profile) -> Plan:
     wanted = collect_user_mcp_servers(project_root, config, identity)
     dest = profile_home(project_root, identity)
@@ -173,7 +172,7 @@ def plan_mcp(project_root: Path, config: Config, identity: Profile) -> Plan:
 
 
 def plan(project_root: Path, config: Config, identity: Profile) -> Plan:
-    """MCP servers and prefixed project skills for one Desktop identity."""
+    """MCP servers and category-namespaced project skills for one Desktop identity."""
     mcp = plan_mcp(project_root, config, identity)
     dest = profile_home(project_root, identity) / SKILLS_DIR
     skill_writes, skill_deletes, skill_count = plan_host_skills(
@@ -182,7 +181,7 @@ def plan(project_root: Path, config: Config, identity: Profile) -> Plan:
         host="hermes",
         identity=identity,
         skills_dir=SKILLS_DIR,
-        prefix=skills_prefix(config),
+        category=SKILLS_CATEGORY,
         dest=dest,
     )
     noun = "skill" if skill_count == 1 else "skills"

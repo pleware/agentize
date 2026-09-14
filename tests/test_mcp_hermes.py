@@ -293,7 +293,7 @@ def test_hermes_copies_skillize_root_skills(tmp_path: Path, monkeypatch):
 
     assert main(["-C", str(project), "mount"]) == 0
 
-    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize.auto.generated.review"
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
 
 
@@ -306,7 +306,7 @@ def test_hermes_copies_a_skill_into_the_profile_home(tmp_path: Path, monkeypatch
 
     assert main(["-C", str(project), "mount"]) == 0
 
-    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize.auto.generated.review"
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
     assert (emitted / "checklist.md").read_text(encoding="utf-8") == "one\n"
     assert not (project / ".cursor" / "skills").exists()
@@ -323,7 +323,7 @@ def test_hermes_host_layer_wins_the_whole_skill(tmp_path: Path, monkeypatch):
 
     assert main(["-C", str(project), "mount"]) == 0
 
-    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize.auto.generated.review"
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# hermes\n"
     assert not (emitted / "extra.md").exists()
 
@@ -348,10 +348,10 @@ def test_hermes_profile_selection_narrows_skills(tmp_path: Path, monkeypatch):
 
     human = home / "profiles" / f"{PREFIX}human" / "skills"
     agent = home / "profiles" / f"{PREFIX}agent" / "skills"
-    assert (human / "agentize.auto.generated.review" / "SKILL.md").is_file()
-    assert not (human / "agentize.auto.generated.deploy").exists()
-    assert (agent / "agentize.auto.generated.review" / "SKILL.md").is_file()
-    assert not (agent / "agentize.auto.generated.deploy").exists()
+    assert (human / "agentize" / "review" / "SKILL.md").is_file()
+    assert not (human / "agentize" / "deploy").exists()
+    assert (agent / "agentize" / "review" / "SKILL.md").is_file()
+    assert not (agent / "agentize" / "deploy").exists()
 
 
 def test_a_hand_written_hermes_skill_survives(tmp_path: Path, monkeypatch):
@@ -370,19 +370,19 @@ def test_a_hand_written_hermes_skill_survives(tmp_path: Path, monkeypatch):
         / "profiles"
         / f"{PREFIX}human"
         / "skills"
-        / "agentize.auto.generated.review"
+        / "agentize" / "review"
         / "SKILL.md"
     ).is_file()
 
 
-def test_removing_a_source_skill_deletes_the_prefixed_hermes_tree(tmp_path: Path, monkeypatch):
+def test_removing_a_source_skill_deletes_the_hermes_tree(tmp_path: Path, monkeypatch):
     home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(project / "agentize.yaml", CONFIG)
     skill = project / ".agents" / "shared" / "skills" / "review"
     write(skill / "SKILL.md", "# review\n")
     assert main(["-C", str(project), "mount"]) == 0
-    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize.auto.generated.review"
+    emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert emitted.is_dir()
 
     (skill / "SKILL.md").unlink()
@@ -436,7 +436,7 @@ def test_a_cursor_scoped_skill_does_not_fail_hermes(tmp_path: Path, monkeypatch)
     ).is_file()
     profile = home / "profiles" / f"{PREFIX}human"
     assert (profile / "config.yaml").is_file()
-    assert not (profile / "skills" / "agentize.auto.generated.graphify").exists()
+    assert not (profile / "skills" / "agentize" / "graphify").exists()
 
 
 def test_per_host_skill_selection(tmp_path: Path, monkeypatch):
@@ -468,20 +468,20 @@ def test_per_host_skill_selection(tmp_path: Path, monkeypatch):
     assert (
         project / ".cursor" / "skills" / "agentize.auto.generated.graphify" / "SKILL.md"
     ).is_file()
-    assert not (project / ".cursor" / "skills" / "agentize.auto.generated.review").exists()
+    assert not (project / ".cursor" / "skills" / "agentize" / "review").exists()
     profile = home / "profiles" / f"{PREFIX}human"
-    assert (profile / "skills" / "agentize.auto.generated.review" / "SKILL.md").is_file()
-    assert not (profile / "skills" / "agentize.auto.generated.graphify").exists()
+    assert (profile / "skills" / "agentize" / "review" / "SKILL.md").is_file()
+    assert not (profile / "skills" / "agentize" / "graphify").exists()
 
 
-def test_hermes_emit_prefix_names_the_skill_directory(tmp_path: Path, monkeypatch):
+def test_hermes_skills_land_under_the_agentize_category(tmp_path: Path, monkeypatch):
     home = isolate_hermes_home(monkeypatch, tmp_path / "home" / ".hermes")
     project = tmp_path / "proj"
     write(
         project / "agentize.yaml",
         "version: 1\n"
         "source: .agents\n"
-        "hosts:\n  hermes:\n    emit_prefix: agentize.auto.generated.hz.\n"
+        "hosts:\n  hermes: {}\n"
         "profiles:\n  human:\n    default: true\n    mcp: [postgres]\n"
         "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
     )
@@ -490,8 +490,7 @@ def test_hermes_emit_prefix_names_the_skill_directory(tmp_path: Path, monkeypatc
     assert main(["-C", str(project), "mount"]) == 0
 
     skills_root = home / "profiles" / f"{PREFIX}human" / "skills"
-    assert (skills_root / "agentize.auto.generated.hz.review" / "SKILL.md").is_file()
-    assert not (skills_root / "agentize.auto.generated.review").exists()
+    assert (skills_root / "agentize" / "review" / "SKILL.md").is_file()
 
 
 def test_strip_without_root_walks_every_existing_home(tmp_path: Path, monkeypatch):

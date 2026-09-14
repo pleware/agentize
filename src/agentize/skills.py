@@ -71,12 +71,20 @@ def skill_resolve_map(units: Iterable[str]) -> dict[str, str]:
     return mapping
 
 
-def emit_dir_name(name: str, prefix: str, qualifier: str | None = None) -> str:
-    """`review` → `agentize.auto.generated.review`, or
-    `agentize.auto.generated.human.review` when an identity is named.
+def emit_dir_name(
+    name: str,
+    prefix: str,
+    qualifier: str | None = None,
+    category: str | None = None,
+) -> str:
+    """`review` → `agentize.auto.generated.review` (flat prefix), or
+    `agentize.auto.generated.human.review` when an identity is named, or
+    `agentize/review` when a category namespaces the skills directory.
 
     A skill already spelled with the prefix keeps its name: the author chose it.
     """
+    if category:
+        return f"{category}/{name}"
     if prefix and name.startswith(prefix):
         return name
     stem = f"{qualifier}.{name}" if qualifier else name
@@ -88,12 +96,15 @@ def plan_skills(
     prefix: str,
     selected: Iterable[str] = (),
     qualifier: str | None = None,
+    category: str | None = None,
 ) -> tuple[Emitted, ...]:
     """Which skills to write, and under what directory name.
 
     An empty selection means every resolved skill. A profile that lists names
     narrows that set. `qualifier` is the identity label; two identities that
-    resolve the same source under it are one entry, not a clash.
+    resolve the same source under it are one entry, not a clash. `category`
+    namespaces the destination under one directory (Hermes' `<category>/<name>`
+    layout) instead of flattening the prefix into the directory name.
     """
     wanted = set(selected)
     emitted: dict[str, Emitted] = {}
@@ -106,7 +117,7 @@ def plan_skills(
         if wanted and name not in wanted:
             continue
 
-        dir_name = emit_dir_name(name, prefix, qualifier)
+        dir_name = emit_dir_name(name, prefix, qualifier, category)
         clash = emitted.get(dir_name)
         if clash is not None:
             if clash.source == item.path:

@@ -65,8 +65,9 @@ def plan_host_skills(
     host: str,
     identity: Profile,
     skills_dir: str,
-    prefix: str,
+    prefix: str = "",
     dest: Path | None = None,
+    category: str | None = None,
 ) -> tuple[list[Write], list[Path], int]:
     """Copy each resolved skill directory whole, and drop what is no longer resolved."""
     return _plan_host_skills(
@@ -77,6 +78,7 @@ def plan_host_skills(
         skills_dir=skills_dir,
         prefix=prefix,
         dest=dest,
+        category=category,
     )
 
 
@@ -87,8 +89,9 @@ def plan_host_skills_all(
     host: str,
     identities: tuple[Profile, ...],
     skills_dir: str,
-    prefix: str,
+    prefix: str = "",
     dest: Path | None = None,
+    category: str | None = None,
 ) -> tuple[list[Write], list[Path], int]:
     """Every identity's skills at once, each directory carrying its label."""
     return _plan_host_skills(
@@ -99,6 +102,7 @@ def plan_host_skills_all(
         skills_dir=skills_dir,
         prefix=prefix,
         dest=dest,
+        category=category,
     )
 
 
@@ -134,8 +138,9 @@ def _plan_host_skills(
     host: str,
     identities: tuple[Profile, ...],
     skills_dir: str,
-    prefix: str,
+    prefix: str = "",
     dest: Path | None = None,
+    category: str | None = None,
 ) -> tuple[list[Write], list[Path], int]:
     """One pass over the skill directories, for one identity or all of them.
 
@@ -171,7 +176,7 @@ def _plan_host_skills(
                 f"{', '.join(missing)}"
             )
         qualifier = identity_label(identity) if qualify else None
-        for item in skills.plan_skills(resolved, prefix, selected, qualifier):
+        for item in skills.plan_skills(resolved, prefix, selected, qualifier, category):
             clash = emitted.setdefault(item.dir_name, item)
             if clash.source != item.source:
                 raise MountError(
@@ -194,12 +199,25 @@ def _plan_host_skills(
     live = {item.dir_name for item in wanted}
     deletes: list[Path] = []
     if dst.is_dir():
-        for child in sorted(dst.iterdir()):
-            if not child.is_dir() or not child.name.startswith(prefix):
-                continue
-            for path in sorted(child.rglob("*")):
-                if path.is_file() and (child.name not in live or path not in keep):
-                    deletes.append(path)
+        if category:
+            # The category is agentize's own namespace: prune only inside it,
+            # never touching bundled or hand-written Hermes skills beside it.
+            owned = dst / category
+            if owned.is_dir():
+                for child in sorted(owned.iterdir()):
+                    if not child.is_dir():
+                        continue
+                    key = f"{category}/{child.name}"
+                    for path in sorted(child.rglob("*")):
+                        if path.is_file() and (key not in live or path not in keep):
+                            deletes.append(path)
+        else:
+            for child in sorted(dst.iterdir()):
+                if not child.is_dir() or not child.name.startswith(prefix):
+                    continue
+                for path in sorted(child.rglob("*")):
+                    if path.is_file() and (child.name not in live or path not in keep):
+                        deletes.append(path)
 
     return writes, deletes, len(wanted)
 

@@ -97,6 +97,13 @@ def test_a_qualifier_marks_the_identity():
     assert plan_skills(items, "agentize.auto.generated.", (), "agent")[0].name == "review"
 
 
+def test_a_category_namespaces_the_directory():
+    items = resolved(("skills/review", "shared/skills/review"))
+    emitted = plan_skills(items, "agentize.auto.generated.", category="agentize")[0]
+    assert emitted.dir_name == "agentize/review"
+    assert emitted.name == "review"
+
+
 def test_an_empty_selection_means_every_skill():
     items = resolved(
         ("skills/review", "shared/skills/review"),
