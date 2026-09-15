@@ -140,7 +140,13 @@ Cascade follows: `--profile-all` at a registry plants every identity's servers
 into each child's single `.cursor/mcp.json`. Hermes already plants every
 identity — each under its own profile home — with or without the flag.
 
-### User MCP (`agentize-*`)
+### Managed MCP keys (`agentize-*`)
+
+agentize owns only the MCP keys it writes. Every server it renders carries
+the `agentize-` prefix — in the project files (`opencode.json`,
+`.cursor/mcp.json`) and the shared user file alike — so a server you wrote by
+hand without the prefix is left alone. Deleting the `agentize-*` keys is the
+whole uninstall.
 
 Cursor's Customize → MCPs tab often hides project servers in a multi-root
 `.code-workspace`. `mount` also writes the planted human servers into
@@ -151,6 +157,15 @@ of the user file stay. `hosts.cursor.user_mcp: false` turns this off.
 
 Last `mount` wins if two trees disagree. Two Cursor windows share one user
 file.
+
+### Aggregate children (`aggregate_children`)
+
+`mount --host opencode` at a registry whose opencode host sets
+`aggregate_children: true` also collects every descendant child's profile
+servers — rebased to the registry root and deduped by name — into that one
+`opencode.json`. Open the workspace root and every product's MCP is available.
+A genuine name collision keeps both, qualified by the child's path
+(`masstrade.wren` vs `hub.wren`).
 
 Hermes uses the same `agentize-` prefix inside a dedicated Desktop profile
 (`<hermes-root>/profiles/agentize-<label>/`). `mount` writes every
@@ -284,6 +299,7 @@ hosts:
     pin: latest                 # or omit; Cursor Agent updates itself
   opencode:
     pin: latest                 # or omit; OpenCode updates itself
+    aggregate_children: true    # also render every child's MCP into this file
     plugins:
       - opencode-extended-sidebar  # TUI sidebar; omitted plugins default to this
       - oh-my-openagent            # server plugin; OpenCode installs both at startup
@@ -438,7 +454,7 @@ agents:
 | Project MCP file | `.cursor/mcp.json` | `.mcp.json` | `.codex/config.toml` | `opencode.json` | — (profile `config.yaml`) |
 | TUI plugins | — | — | — | `tui.json` | — |
 | Format | JSON | JSON | TOML | JSON | YAML |
-| Disable one server | UI toggle only | `disabledMcpjsonServers` | `enabled = false` | rendered whole | owned `agentize-*` keys only |
+| Disable one server | UI toggle only | `disabledMcpjsonServers` | `enabled = false` | owned `agentize-*` keys only | owned `agentize-*` keys only |
 | Tool allowlist | `.cursor/cli.json` | permission rules | `enabled_tools` | — | `tools.include` on the server |
 | Env interpolation | `${env:...}` | — | `env:VAR` | — | `${env:...}` / `${VAR}` |
 | Native profiles | no | no | **yes** | no | **yes** (`HERMES_HOME`) |
@@ -447,9 +463,9 @@ agents:
 
 ### Cursor limitation
 
-Cursor merges `~/.cursor/mcp.json` with `.cursor/mcp.json`, and on a name collision the project entry wins. A profile can **redefine** a server, but it cannot **remove** one. With `--profile-all` the project keys carry the identity (`human.postgres`), so all of them coexist instead of the last one winning.
+Cursor merges `~/.cursor/mcp.json` with `.cursor/mcp.json`, and on a name collision the project entry wins. A profile can **redefine** a server, but it cannot **remove** one. With `--profile-all` the project keys carry the identity (`agentize-human.postgres`), so all of them coexist instead of the last one winning.
 
-<small>Cursor documents disabling only as a toggle in the sidebar, with no committable file behind it. The practical answer is to keep the global file empty and let agentize render <code>.cursor/mcp.json</code> per project. Then each project gets exactly what its profile declares, and nothing else. Per-tool denies can go in <code>.cursor/cli.json</code>, which does live in the repository. Claude Code and Codex can subtract. OpenCode is rendered whole, so it is already exact.</small>
+<small>Cursor documents disabling only as a toggle in the sidebar, with no committable file behind it. The practical answer is to keep the global file empty and let agentize render <code>.cursor/mcp.json</code> per project. Then each project gets exactly what its profile declares, and nothing else. Per-tool denies can go in <code>.cursor/cli.json</code>, which does live in the repository. Claude Code and Codex can subtract. OpenCode owns only its <code>agentize-*</code> keys, so your hand-written servers survive.</small>
 
 ### Out of scope
 
