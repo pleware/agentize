@@ -4,7 +4,6 @@ from pathlib import Path
 
 from agentize.cli import main
 from agentize.hosts import hermes
-from agentize.session import LastRun, remember
 from agentize.store_tree import data_dir, ensure_data_dir
 from agentize.wrapper import FILES, PS1_NAME, write_wrappers
 
@@ -77,12 +76,12 @@ def test_home_is_left_alone_unless_asked(tmp_path: Path, monkeypatch):
     project = tmp_path / "proj"
     project.mkdir()
     monkeypatch.setenv("AGENTIZE_HOME", str(home))
-    remember(project, LastRun(host="opencode", profile="human"))
+    (home / "ignite").mkdir(parents=True)
 
     assert main(["-C", str(project), "cleanup"]) == 0
 
     assert not data_dir(project).exists()
-    assert (home / "last.yaml").is_file()
+    assert (home / "ignite").is_dir()
 
 
 def test_home_flag_removes_the_user_tree(tmp_path: Path, monkeypatch):
@@ -91,7 +90,7 @@ def test_home_flag_removes_the_user_tree(tmp_path: Path, monkeypatch):
     project.mkdir()
     monkeypatch.setenv("AGENTIZE_HOME", str(home))
     monkeypatch.setattr(hermes, "hermes_root_candidates", lambda: (tmp_path / "hermes",))
-    remember(project, LastRun(host="opencode", profile="human"))
+    (home / "ignite").mkdir(parents=True)
 
     assert main(["-C", str(project), "--cleanup", "--home"]) == 0
 

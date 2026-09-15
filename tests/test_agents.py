@@ -8,12 +8,11 @@ import pytest
 from agentize.cli import main
 from agentize.config import ConfigError, parse_config
 from agentize.resolve import resolve
-from agentize.session import load_last
 
 AGENTS = {
     "version": 1,
     "hosts": {"opencode": {}},
-    "profiles": {"human": {"default": True}},
+    "profiles": {"human": {}},
     "agents": {
         "default": {
             "isolate_data": True,
@@ -120,17 +119,22 @@ def test_select_driver_rejects_both_flags():
         config.select_driver("human", "php")
 
 
-def test_select_driver_prefers_last_agent():
+def test_select_driver_returns_a_profile_by_name():
     config = parse_config(AGENTS)
-    chosen = config.select_driver(None, None, last_profile="human", last_agent="php")
+    assert config.select_driver("human", None).name == "human"
+
+
+def test_select_driver_returns_an_agent_by_slug():
+    config = parse_config(AGENTS)
+    chosen = config.select_driver(None, "php")
     assert chosen.name == "php"
     assert chosen.origin == "agent"
 
 
-def test_stale_last_agent_is_ignored():
-    config = parse_config({"version": 1, "profiles": {"human": {"default": True}}})
-    chosen = config.select_driver(None, None, last_agent="php")
-    assert chosen.name == "human"
+def test_select_driver_requires_an_identity():
+    config = parse_config(AGENTS)
+    with pytest.raises(ConfigError, match="an identity is required"):
+        config.select_driver(None, None)
 
 
 def test_agent_layers_are_default_then_slug():
@@ -149,8 +153,8 @@ def test_agent_layers_are_default_then_slug():
 
 
 def test_pass_profile_and_agent_is_an_error(tmp_path: Path, capsys):
-    write(tmp_path / "agentize.yaml", "version: 1\nprofiles:\n  human:\n    default: true\n")
-    assert main(["-C", str(tmp_path), "mount", "--profile", "human", "--agent", "php"]) == 1
+    write(tmp_path / "agentize.yaml", "version: 1\nprofiles:\n  human:\n")
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human", "--agent", "php"]) == 1
     assert "not both" in capsys.readouterr().err
 
 
@@ -160,7 +164,7 @@ def test_mount_agent_writes_only_that_lsp(tmp_path: Path):
         "version: 1\n"
         "source: .agents\n"
         "hosts:\n  opencode: {}\n"
-        "profiles:\n  human:\n    default: true\n"
+        "profiles:\n  human:\n"
         "agents:\n"
         "  default:\n    lsp: false\n"
         "  php:\n    lsp: [phpantom]\n"
@@ -172,14 +176,14 @@ def test_mount_agent_writes_only_that_lsp(tmp_path: Path):
     )
     write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(tmp_path), "mount", "--agent", "php"]) == 0
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--agent", "php"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert data["lsp"] == {
         "phpantom": {"command": ["phpantom_lsp", "--stdio"], "extensions": [".php"]}
     }
     assert data["permission"]["lsp"] == "allow"
 
-    assert main(["-C", str(tmp_path), "mount", "--profile", "human"]) == 0
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert data["lsp"] is False
     assert data["permission"]["lsp"] == "deny"
@@ -192,7 +196,7 @@ def test_run_mounts_before_spawn(tmp_path: Path, monkeypatch):
         "version: 1\n"
         "source: .agents\n"
         "hosts:\n  opencode: {}\n"
-        "profiles:\n  human:\n    default: true\n"
+        "profiles:\n  human:\n"
         "agents:\n"
         "  default:\n    isolate_data: true\n"
         "  php:\n    lsp: [phpantom]\n"
@@ -207,12 +211,9 @@ def test_run_mounts_before_spawn(tmp_path: Path, monkeypatch):
     )
     monkeypatch.setattr("agentize.cli.ensure_toolchain", lambda *a, **k: {})
 
-    assert main(["-C", str(tmp_path), "run", "--agent", "php"]) == 0
+    assert main(["-C", str(tmp_path), "run", "--host", "opencode", "--agent", "php"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert "phpantom" in data["lsp"]
-    last = load_last(tmp_path)
-    assert last.agent == "php"
-    assert last.profile is None
 
 
 def test_old_profiles_agent_still_loads():
@@ -220,7 +221,7 @@ def test_old_profiles_agent_still_loads():
         {
             "version": 1,
             "profiles": {
-                "human": {"default": True},
+                "human": {},
                 "agent": {"isolate_data": True, "mcp": ["postgres"]},
             },
             "mcp": {"servers": {"postgres": {"command": ["postgres-mcp"]}}},

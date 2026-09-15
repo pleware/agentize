@@ -18,28 +18,15 @@ from .install import isolated_binary, path_name
 from .store_tree import ensure_data_dir, host_data_dir
 
 
-def select_host(
-    config: Config, requested: str | None, remembered: str | None = None
-) -> Host:
+def select_host(config: Config, requested: str | None) -> Host:
+    if requested is None:
+        raise AgentizeError("a host is required; name one with --host")
     enabled = list(config.enabled_hosts())
     names = [host.name for host in enabled]
-    if requested is not None:
-        if requested not in names:
-            known = ", ".join(sorted(names)) or "none"
-            raise AgentizeError(f"host {requested!r} is not enabled (enabled: {known})")
-        return config.hosts[requested]
-    if remembered is not None and remembered in names:
-        return config.hosts[remembered]
-    if len(enabled) == 1:
-        return enabled[0]
-    if not enabled:
-        raise AgentizeError("no host is enabled in the configuration")
-    if config.default_host is not None:
-        return config.default_host
-    raise AgentizeError(
-        f"more than one host is enabled; name one with --host "
-        f"({', '.join(names)}) or mark one default: true"
-    )
+    if requested not in names:
+        known = ", ".join(sorted(names)) or "none"
+        raise AgentizeError(f"host {requested!r} is not enabled (enabled: {known})")
+    return config.hosts[requested]
 
 
 def isolation_env(project_root: Path, host: str) -> dict[str, str]:

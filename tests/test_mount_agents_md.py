@@ -19,7 +19,6 @@ hosts:
   opencode: {}
 profiles:
   human:
-    default: true
 """
 
 
@@ -88,7 +87,7 @@ def test_only_rules_are_listed():
 
 
 def test_agents_md_lists_the_resolved_rules(project: Path):
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "- [core/style.mdc](.agents/shared/core/style.mdc)" in text
@@ -99,7 +98,7 @@ def test_agents_md_lists_the_resolved_rules(project: Path):
 def test_agents_md_ignores_the_host_layer(project: Path):
     write(project / ".agents" / "hosts" / "cursor" / "only-cursor.mdc", "cursor\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     assert "only-cursor.mdc" not in (project / "AGENTS.md").read_text(encoding="utf-8")
 
@@ -107,7 +106,7 @@ def test_agents_md_ignores_the_host_layer(project: Path):
 def test_agents_md_takes_the_profile_layer(project: Path):
     write(project / ".agents" / "profiles" / "human" / "core" / "style.mdc", "human\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "(.agents/profiles/human/core/style.mdc)" in text
@@ -117,7 +116,7 @@ def test_agents_md_takes_the_profile_layer(project: Path):
 def test_existing_prose_survives_a_mount(project: Path):
     write(project / "AGENTS.md", "# House rules\n\nRead this first.\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert text.startswith("# House rules\n\nRead this first.\n")
@@ -127,7 +126,7 @@ def test_existing_prose_survives_a_mount(project: Path):
 def test_crlf_line_endings_are_preserved(project: Path):
     write(project / "AGENTS.md", "# House rules\r\n\r\nRead this first.\r\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     text = (project / "AGENTS.md").read_bytes().decode("utf-8")
     assert "\r\n" in text
@@ -137,7 +136,7 @@ def test_crlf_line_endings_are_preserved(project: Path):
 def test_opencode_lists_the_winning_files_only(project: Path):
     write(project / ".agents" / "profiles" / "human" / "core" / "style.mdc", "human\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
 
     data = json.loads((project / "opencode.json").read_text(encoding="utf-8"))
     assert data["instructions"] == [
@@ -149,7 +148,7 @@ def test_opencode_lists_the_winning_files_only(project: Path):
 def test_opencode_sees_its_own_host_layer(project: Path):
     write(project / ".agents" / "hosts" / "opencode" / "extra.mdc", "extra\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
 
     data = json.loads((project / "opencode.json").read_text(encoding="utf-8"))
     assert ".agents/hosts/opencode/extra.mdc" in data["instructions"]
@@ -158,7 +157,7 @@ def test_opencode_sees_its_own_host_layer(project: Path):
 def test_unrelated_opencode_keys_are_preserved(project: Path):
     write(project / "opencode.json", json.dumps({"theme": "dark", "instructions": ["old.mdc"]}))
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
 
     data = json.loads((project / "opencode.json").read_text(encoding="utf-8"))
     assert data["theme"] == "dark"
@@ -168,12 +167,12 @@ def test_unrelated_opencode_keys_are_preserved(project: Path):
 def test_broken_opencode_json_is_reported(project: Path, capsys):
     write(project / "opencode.json", "{ not json")
 
-    assert main(["-C", str(project), "mount"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"]) == 1
     assert "not valid JSON" in capsys.readouterr().err
 
 
 def test_instruction_paths_match_the_agents_md_listing(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
 
     data = json.loads((project / "opencode.json").read_text(encoding="utf-8"))
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
@@ -182,19 +181,19 @@ def test_instruction_paths_match_the_agents_md_listing(project: Path):
 
 
 def test_mount_is_idempotent_across_all_targets(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
     stamps = {
         path: path.stat().st_mtime_ns for path in (project / "AGENTS.md", project / "opencode.json")
     }
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
 
     for path, before in stamps.items():
         assert path.stat().st_mtime_ns == before
 
 
 def test_check_covers_agents_md_and_opencode(project: Path, capsys):
-    assert main(["-C", str(project), "mount", "--check"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human", "--check"]) == 1
 
     out = capsys.readouterr().out
     assert "create AGENTS.md" in out

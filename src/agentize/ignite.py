@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import AgentizeError
-from .session import user_state_dir
+from .store_tree import user_state_dir
 
 DEFAULT_KIT_URL = "https://github.com/pleware/ignite.git"
 IGNITE_TOML = "ignite.toml"

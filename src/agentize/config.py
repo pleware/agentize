@@ -41,9 +41,9 @@ TOP_LEVEL_KEYS = frozenset(
         "inherit",
     }
 )
-HOST_KEYS = frozenset({"enabled", "default", "emit_prefix", "plugins", "pin", "user_mcp"})
+HOST_KEYS = frozenset({"enabled", "emit_prefix", "plugins", "pin", "user_mcp"})
 GIT_KEYS = frozenset({"user_name", "user_email", "push_remote"})
-PROFILE_KEYS = frozenset({"default", "isolate_data", "git", "mcp", "skills", "lsp"})
+PROFILE_KEYS = frozenset({"isolate_data", "git", "mcp", "skills", "lsp"})
 AGENT_KEYS = PROFILE_KEYS | {"needs"}
 MCP_SECTION_KEYS = frozenset({"servers"})
 LSP_SECTION_KEYS = frozenset({"servers"})
@@ -84,7 +84,6 @@ LSP_ALL = LspChoice(kind="all")
 class Host:
     name: str
     enabled: bool = True
-    default: bool = False
     emit_prefix: str = ""
     plugins: tuple[str, ...] = ()
     """OpenCode plugin specs, in order. Ignored by hosts that have no plugin list."""
@@ -99,7 +98,6 @@ class Host:
 @dataclass(frozen=True)
 class Profile:
     name: str
-    default: bool = False
     isolate_data: bool = False
     git: GitIdentity | None = None
     mcp: tuple[str, ...] = ()
@@ -220,20 +218,6 @@ class Config:
     worktree_dir: str | None = None
     inherit: InheritSpec = field(default_factory=InheritSpec)
 
-    @property
-    def default_profile(self) -> Profile | None:
-        for profile in self.profiles.values():
-            if profile.default:
-                return profile
-        return None
-
-    @property
-    def default_host(self) -> Host | None:
-        for host in self.hosts.values():
-            if host.default and host.enabled:
-                return host
-        return None
-
     def enabled_hosts(self) -> tuple[Host, ...]:
         return tuple(host for host in self.hosts.values() if host.enabled)
 
@@ -269,15 +253,12 @@ class Config:
         return {name: self.lsp_servers[name] for name in profile.lsp.names}
 
     def select_profile(self, requested: str | None) -> Profile:
-        if requested is not None:
-            if requested not in self.profiles:
-                known = ", ".join(sorted(self.profiles)) or "none"
-                raise ConfigError(f"unknown profile {requested!r} (declared: {known})")
-            return self.profiles[requested]
-        default = self.default_profile
-        if default is None:
-            raise ConfigError("no profile is marked default; name one with --profile")
-        return default
+        if requested is None:
+            raise ConfigError("a profile is required; name one with --profile")
+        if requested not in self.profiles:
+            known = ", ".join(sorted(self.profiles)) or "none"
+            raise ConfigError(f"unknown profile {requested!r} (declared: {known})")
+        return self.profiles[requested]
 
     def resolve_agent(self, slug: str) -> Profile:
         if slug not in self.agents:
@@ -302,9 +283,6 @@ class Config:
         self,
         profile_name: str | None,
         agent_name: str | None,
-        *,
-        last_profile: str | None = None,
-        last_agent: str | None = None,
     ) -> Profile:
         if profile_name and agent_name:
             raise ConfigError("pass --profile or --agent, not both")
@@ -312,17 +290,7 @@ class Config:
             return self.resolve_agent(agent_name)
         if profile_name:
             return self.select_profile(profile_name)
-        if last_agent and last_agent in self.agents:
-            return self.resolve_agent(last_agent)
-        if last_profile and last_profile in self.profiles:
-            return self.select_profile(last_profile)
-        if self.default_profile is not None:
-            return self.default_profile
-        if DEFAULT_AGENT in self.agents:
-            return self.resolve_agent(DEFAULT_AGENT)
-        raise ConfigError(
-            "no profile is marked default; name one with --profile or --agent"
-        )
+        raise ConfigError("an identity is required; name one with --profile or --agent")
 
 
 def load_config(path: Path) -> Config:
@@ -366,8 +334,6 @@ def parse_config(
     _check_references(profiles, servers, origin)
     _check_agent_block(agents, servers, lsp_servers, origin)
     _check_lsp_references(profiles, lsp_servers, origin)
-    _check_single_default(profiles, origin)
-    _check_single_default_host(hosts, origin)
 
     skills = _mapping(data.get("skills"), f"{origin}: skills")
     _reject_unknown_keys(skills, SKILLS_KEYS, f"{origin}: skills")
@@ -409,9 +375,6 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         enabled = body.get("enabled", True)
         if not isinstance(enabled, bool):
             raise ConfigError(f"{where}.enabled must be true or false")
-        default = body.get("default", False)
-        if not isinstance(default, bool):
-            raise ConfigError(f"{where}.default must be true or false")
         prefix = body.get("emit_prefix", "")
         if not isinstance(prefix, str):
             raise ConfigError(f"{where}.emit_prefix must be a string")
@@ -431,7 +394,6 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
         hosts[name] = Host(
             name=name,
             enabled=enabled,
-            default=default,
             emit_prefix=prefix,
             plugins=plugins,
             pin=_optional_str(body.get("pin"), f"{where}.pin"),
@@ -446,12 +408,10 @@ def _parse_profiles(raw: Any, origin: str) -> dict[str, Profile]:
         where = f"{origin}: profiles.{name}"
         body = _mapping(value, where)
         _reject_unknown_keys(body, PROFILE_KEYS, where)
-        for key in ("default", "isolate_data"):
-            if key in body and not isinstance(body[key], bool):
-                raise ConfigError(f"{where}.{key} must be true or false")
+        if "isolate_data" in body and not isinstance(body["isolate_data"], bool):
+            raise ConfigError(f"{where}.isolate_data must be true or false")
         profiles[name] = Profile(
             name=name,
-            default=bool(body.get("default", False)),
             isolate_data=bool(body.get("isolate_data", False)),
             git=_parse_git(body.get("git"), f"{where}.git"),
             mcp=_str_list(body.get("mcp"), f"{where}.mcp"),
@@ -727,16 +687,7 @@ def _check_agent_block(
         _check_lsp_names(merged.lsp, lsp_servers, f"{origin}: agents.{name}.lsp")
 
 
-def _check_single_default(profiles: dict[str, Profile], origin: str) -> None:
-    defaults = [name for name, profile in profiles.items() if profile.default]
-    if len(defaults) > 1:
-        raise ConfigError(f"{origin}: more than one default profile: {', '.join(sorted(defaults))}")
 
-
-def _check_single_default_host(hosts: dict[str, Host], origin: str) -> None:
-    defaults = [name for name, host in hosts.items() if host.default]
-    if len(defaults) > 1:
-        raise ConfigError(f"{origin}: more than one default host: {', '.join(sorted(defaults))}")
 
 
 def _reject_unknown_keys(

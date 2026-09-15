@@ -14,7 +14,7 @@ import stat
 from dataclasses import dataclass
 from pathlib import Path
 
-from .session import user_state_dir
+from .store_tree import user_state_dir
 from .store_tree import data_dir
 from .wrapper import FILES, is_self_checkout
 

@@ -29,7 +29,6 @@ from .mount import (
     plan_opencode,
     plan_opencode_all,
 )
-from .session import LastRun, load_last, remember
 from .store_tree import config_is_ignored, config_path, ensure_data_dir
 from .user_mcp import (
     collect_all_user_mcp_servers,
@@ -59,12 +58,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--host",
         metavar="NAME",
-        help="host for run or fetch (default: the remembered or default host)",
+        help="host for run, mount, or fetch (required for run and mount)",
     )
     parser.add_argument(
         "--profile",
         metavar="NAME",
-        help="profile for run or mount (default: the remembered or default profile)",
+        help="profile for run or mount (required)",
     )
     parser.add_argument(
         "--agent",
@@ -107,8 +106,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="also remove ~/.agentize/",
     )
 
-    mount = subcommands.add_parser("mount", help="render rules for each enabled host")
-    mount.add_argument("--profile", metavar="NAME", help="profile to render (default: from config)")
+    mount = subcommands.add_parser("mount", help="render rules for one host")
+    mount.add_argument("--host", metavar="NAME", help="host to render (required)")
+    mount.add_argument("--profile", metavar="NAME", help="profile to render (required)")
     mount.add_argument("--agent", metavar="SLUG", help="agent slug to render")
     mount.add_argument(
         "--profile-all",
@@ -122,10 +122,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="report what would change and exit non-zero, without writing",
     )
 
-    run = subcommands.add_parser("run", help="launch a host with the profile applied (default)")
-    run.add_argument("--profile", metavar="NAME", help="profile to apply (default: from config)")
+    run = subcommands.add_parser("run", help="launch a host with the profile applied")
+    run.add_argument("--profile", metavar="NAME", help="profile to apply (required)")
     run.add_argument("--agent", metavar="SLUG", help="agent slug to apply")
-    run.add_argument("--host", metavar="NAME", help="host to launch (default: the enabled one)")
+    run.add_argument("--host", metavar="NAME", help="host to launch (required)")
     run.add_argument(
         "--global",
         dest="use_global",
@@ -195,9 +195,11 @@ ALL_PLAN_BUILDERS = {"cursor": plan_cursor_all, "opencode": plan_opencode_all}
 HOME_HOSTS = frozenset({"hermes"})
 
 
-def mount_plans(root: Path, config, identity: Profile) -> list[Plan]:
+def mount_plans(root: Path, config, identity: Profile, host_name: str) -> list[Plan]:
     plans = [plan_agents_md(root, config, identity)]
     for host in config.enabled_hosts():
+        if host.name != host_name:
+            continue
         if host.name in HOME_HOSTS:
             continue
         builder = PLAN_BUILDERS.get(host.name)
@@ -208,10 +210,14 @@ def mount_plans(root: Path, config, identity: Profile) -> list[Plan]:
     return plans
 
 
-def mount_plans_all(root: Path, config, identities: tuple[Profile, ...]) -> list[Plan]:
+def mount_plans_all(
+    root: Path, config, identities: tuple[Profile, ...], host_name: str
+) -> list[Plan]:
     """One plan per host holding every identity, so pruning sees the union."""
     plans = [plan_agents_md_all(root, config, identities)]
     for host in config.enabled_hosts():
+        if host.name != host_name:
+            continue
         if host.name in HOME_HOSTS:
             continue
         builder = ALL_PLAN_BUILDERS.get(host.name)
@@ -222,19 +228,14 @@ def mount_plans_all(root: Path, config, identities: tuple[Profile, ...]) -> list
     return plans
 
 
-def _select_identity(config, *, profile_name, agent_name, last: LastRun):
-    return config.select_driver(
-        profile_name,
-        agent_name,
-        last_profile=last.profile,
-        last_agent=last.agent,
-    )
+def _select_identity(config, *, profile_name, agent_name):
+    return config.select_driver(profile_name, agent_name)
 
 
-def _memory_for(identity: Profile) -> tuple[str | None, str | None]:
-    if identity.origin == "agent":
-        return None, identity.name
-    return identity.name, None
+def _require_host(host_name: str | None) -> str:
+    if host_name is None:
+        raise ConfigError("a host is required; pass --host")
+    return host_name
 
 
 def _print_plan(root: Path, plan: Plan, *, check: bool, prefix: str = "") -> int:
@@ -267,37 +268,41 @@ def cmd_mount(
     profile_name: str | None,
     agent_name: str | None,
     profile_all: bool,
+    host_name: str | None,
     check: bool,
 ) -> int:
     if profile_all and (profile_name or agent_name):
         raise ConfigError("pass --profile-all, or --profile/--agent, not both")
+    host = _require_host(host_name)
     policy = config_path(root)
     pending = 0
-    last = load_last(root)
 
     if policy.is_file():
         config = load_config(policy)
         if profile_all:
             identities = config.all_identities()
-            for plan in mount_plans_all(root, config, identities):
+            for plan in mount_plans_all(root, config, identities, host):
                 pending += _print_plan(root, plan, check=check, prefix="[all] ")
-            pending += _emit_cascade(
-                cascade_all(root, config, identities, check=check), who="all", check=check
-            )
-            pending += _emit_user_mcp_all(root, config, identities, check=check)
+            if host == "cursor":
+                pending += _emit_cascade(
+                    cascade_all(root, config, identities, check=check), who="all", check=check
+                )
+                pending += _emit_user_mcp_all(root, config, identities, check=check)
         else:
             identity = _select_identity(
-                config, profile_name=profile_name, agent_name=agent_name, last=last
+                config, profile_name=profile_name, agent_name=agent_name
             )
-            for plan in mount_plans(root, config, identity):
+            for plan in mount_plans(root, config, identity, host):
                 pending += _print_plan(root, plan, check=check, prefix=f"[{identity.name}] ")
-            pending += _emit_cascade(
-                cascade(root, config, identity, check=check),
-                who=identity.name,
-                check=check,
-            )
-            pending += _emit_user_mcp(root, config, identity, check=check)
-        pending += _emit_hermes(root, config, check=check)
+            if host == "cursor":
+                pending += _emit_cascade(
+                    cascade(root, config, identity, check=check),
+                    who=identity.name,
+                    check=check,
+                )
+                pending += _emit_user_mcp(root, config, identity, check=check)
+        if host == "hermes":
+            pending += _emit_hermes(root, config, check=check)
     else:
         parent = find_inherit_root(root)
         if parent is None:
@@ -305,26 +310,32 @@ def cmd_mount(
         config = load_config(config_path(parent))
         if profile_all:
             identities = config.all_identities()
-            pending += _emit_cascade(
-                plant_child_all(parent, root, config, identities, check=check),
-                who="all",
-                check=check,
-            )
-            pending += _emit_user_mcp_all(parent, config, identities, check=check)
+            if host == "cursor":
+                pending += _emit_cascade(
+                    plant_child_all(parent, root, config, identities, check=check),
+                    who="all",
+                    check=check,
+                )
+                pending += _emit_user_mcp_all(parent, config, identities, check=check)
         else:
             identity = _select_identity(
-                config, profile_name=profile_name, agent_name=agent_name, last=last
+                config, profile_name=profile_name, agent_name=agent_name
             )
-            pending += _emit_cascade(
-                plant_child(parent, root, config, identity, check=check),
-                who=identity.name,
-                check=check,
-            )
-            pending += _emit_user_mcp(parent, config, identity, check=check)
-        pending += _emit_hermes(parent, config, check=check)
+            if host == "cursor":
+                pending += _emit_cascade(
+                    plant_child(parent, root, config, identity, check=check),
+                    who=identity.name,
+                    check=check,
+                )
+                pending += _emit_user_mcp(parent, config, identity, check=check)
+        if host == "hermes":
+            pending += _emit_hermes(parent, config, check=check)
 
     if check and pending:
-        print(f"agentize: {pending} file(s) out of date — run: agentize mount", file=sys.stderr)
+        print(
+            f"agentize: {pending} file(s) out of date — run: agentize mount --host {host}",
+            file=sys.stderr,
+        )
         return 1
     return 0
 
@@ -362,18 +373,19 @@ def _emit_hermes(root: Path, config, *, check: bool) -> int:
     return pending
 
 
-def _mount_for_run(root: Path, config, identity: Profile) -> None:
-    for plan in mount_plans(root, config, identity):
+def _mount_for_run(root: Path, config, identity: Profile, host_name: str) -> None:
+    for plan in mount_plans(root, config, identity, host_name):
         for line in apply(root, plan):
             print(f"  {line}", file=sys.stderr)
-    for _label, _plan, lines in cascade(root, config, identity, check=False):
-        for line in lines:
-            print(f"  {line}", file=sys.stderr)
-    if cursor_user_mcp_enabled(config):
-        wanted = collect_user_mcp_servers(root, config, identity)
-        for line in apply(user_mcp_path().parent.parent, plan_user_mcp(wanted)):
-            print(f"  {line}", file=sys.stderr)
-    if hermes.hermes_enabled(config):
+    if host_name == "cursor":
+        for _label, _plan, lines in cascade(root, config, identity, check=False):
+            for line in lines:
+                print(f"  {line}", file=sys.stderr)
+        if cursor_user_mcp_enabled(config):
+            wanted = collect_user_mcp_servers(root, config, identity)
+            for line in apply(user_mcp_path().parent.parent, plan_user_mcp(wanted)):
+                print(f"  {line}", file=sys.stderr)
+    if host_name == "hermes" and hermes.hermes_enabled(config):
         for who in hermes.hermes_identities(config):
             plan = hermes.plan(root, config, who)
             for line in apply(plan.root or root, plan):
@@ -392,33 +404,16 @@ def cmd_run(
     use_global: bool,
     extra: list[str],
 ) -> int:
-    last = load_last(root)
-    chosen_global = use_global if use_global or host_name is not None else last.use_global
-
     policy = config_path(root)
     if not policy.is_file():
-        return _run_without_policy(
-            root, host_name=host_name or last.host, extra=extra
-        )
+        return _run_without_policy(root, host_name=host_name, extra=extra)
 
     config = load_config(policy)
     identity = _select_identity(
-        config, profile_name=profile_name, agent_name=agent_name, last=last
+        config, profile_name=profile_name, agent_name=agent_name
     )
-    host = select_host(config, host_name, last.host)
-    use_global = chosen_global
-    profile_mem, agent_mem = _memory_for(identity)
-
-    remember(
-        root,
-        LastRun(
-            host=host.name,
-            profile=profile_mem,
-            agent=agent_mem,
-            use_global=use_global,
-        ),
-    )
-    _mount_for_run(root, config, identity)
+    host = select_host(config, host_name)
+    _mount_for_run(root, config, identity, host.name)
     prepare(root, identity, host.name)
     servers = tuple(
         bind_server_markers(server, root) for server in config.servers_for(identity)
@@ -438,10 +433,8 @@ def cmd_run(
 def _run_without_policy(root: Path, *, host_name: str | None, extra: list[str]) -> int:
     if not host_name:
         raise AgentizeError(
-            f"no {CONFIG_NAME} here and no last host to repeat. "
-            f"Pass --host or write {CONFIG_NAME}."
+            f"no {CONFIG_NAME} here. Pass --host or write {CONFIG_NAME}."
         )
-    remember(root, LastRun(host=host_name, use_global=True))
     argv = [global_executable(host_name), *extra]
     print(f"agentize: {host_name} (PATH, no {CONFIG_NAME})", file=sys.stderr)
     return spawn(root, argv, dict(os.environ))
@@ -492,6 +485,7 @@ def main(argv: list[str] | None = None) -> int:
                 profile_name=args.profile,
                 agent_name=getattr(args, "agent", None),
                 profile_all=bool(getattr(args, "profile_all", False)),
+                host_name=args.host,
                 check=args.check,
             )
         if args.command == "fetch":

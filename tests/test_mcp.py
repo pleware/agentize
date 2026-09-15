@@ -17,7 +17,6 @@ hosts:
   opencode: {}
 profiles:
   human:
-    default: true
     mcp: [postgres, github]
   agent:
     mcp: [postgres]
@@ -98,7 +97,7 @@ def test_literal_secret_in_env_is_rejected():
 
 
 def test_cursor_renders_stdio_and_remote(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
     servers = cursor_servers(project)
 
     assert servers["postgres"] == {
@@ -114,21 +113,21 @@ def test_cursor_renders_stdio_and_remote(project: Path):
 
 
 def test_cursor_reference_survives_verbatim(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
     raw = (project / ".cursor" / "mcp.json").read_text(encoding="utf-8")
     assert "${env:DATABASE_URL}" in raw
 
 
 def test_agent_profile_gets_fewer_servers(project: Path):
-    main(["-C", str(project), "mount", "--profile", "agent"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
     assert sorted(cursor_servers(project)) == ["postgres"]
 
 
 def test_switching_profile_removes_the_extra_server(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
     assert "github" in cursor_servers(project)
 
-    main(["-C", str(project), "mount", "--profile", "agent"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
 
     assert "github" not in cursor_servers(project)
 
@@ -136,7 +135,7 @@ def test_switching_profile_removes_the_extra_server(project: Path):
 def test_unrelated_cursor_mcp_keys_are_preserved(project: Path):
     write(project / ".cursor" / "mcp.json", json.dumps({"note": "keep", "mcpServers": {}}))
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
     assert data["note"] == "keep"
@@ -153,7 +152,7 @@ def test_a_single_word_command_emits_no_args():
 
 
 def test_opencode_renders_local_and_remote(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
     servers = opencode_servers(project)
 
     assert servers["postgres"] == {
@@ -167,34 +166,35 @@ def test_opencode_renders_local_and_remote(project: Path):
 
 
 def test_opencode_keeps_instructions_alongside_mcp(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
     data = json.loads((project / "opencode.json").read_text(encoding="utf-8"))
     assert data["instructions"] == [".agents/shared/style.mdc"]
     assert sorted(data["mcp"]) == ["github", "postgres"]
 
 
 def test_both_hosts_receive_the_same_server_set(project: Path):
-    main(["-C", str(project), "mount", "--profile", "agent"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "agent"])
     assert sorted(cursor_servers(project)) == sorted(opencode_servers(project))
 
 
 def test_profile_order_is_preserved(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
     assert list(opencode_servers(project)) == ["postgres", "github"]
 
 
 def test_mcp_render_is_idempotent(project: Path):
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
     target = project / ".cursor" / "mcp.json"
     before = target.stat().st_mtime_ns
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     assert target.stat().st_mtime_ns == before
 
 
 def test_check_reports_a_missing_mcp_file(project: Path, capsys):
-    assert main(["-C", str(project), "mount", "--check"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human", "--check"]) == 1
     assert "create .cursor/mcp.json" in capsys.readouterr().out
 
 
@@ -229,12 +229,11 @@ def test_mount_writes_the_plugin_list(tmp_path: Path):
         "  opencode:\n"
         "    plugins: [omo]\n"
         "profiles:\n"
-        "  human:\n"
-        "    default: true\n",
+        "  human:\n",
     )
     write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(tmp_path), "mount"]) == 0
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert data["plugin"] == ["oh-my-openagent"]
     assert not (tmp_path / "tui.json").exists()
@@ -248,12 +247,11 @@ def test_mount_writes_the_sidebar_to_tui_json(tmp_path: Path):
         "hosts:\n"
         "  opencode: {}\n"
         "profiles:\n"
-        "  human:\n"
-        "    default: true\n",
+        "  human:\n",
     )
     write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(tmp_path), "mount"]) == 0
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human"]) == 0
     data = json.loads((tmp_path / "opencode.json").read_text(encoding="utf-8"))
     assert data["plugin"] == []
     tui = json.loads((tmp_path / "tui.json").read_text(encoding="utf-8"))
@@ -270,13 +268,12 @@ def test_mount_preserves_unrelated_tui_keys(tmp_path: Path):
         "  opencode:\n"
         "    plugins: [oes]\n"
         "profiles:\n"
-        "  human:\n"
-        "    default: true\n",
+        "  human:\n",
     )
     write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
     write(tmp_path / "tui.json", json.dumps({"theme": "system", "plugin": []}))
 
-    assert main(["-C", str(tmp_path), "mount"]) == 0
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human"]) == 0
     tui = json.loads((tmp_path / "tui.json").read_text(encoding="utf-8"))
     assert tui["theme"] == "system"
     assert tui["plugin"] == ["opencode-extended-sidebar"]

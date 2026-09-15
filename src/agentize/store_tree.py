@@ -13,12 +13,14 @@ This is not a workspace tree (ignite kinds). Language binaries stay in
 
 from __future__ import annotations
 
+import os
 import subprocess
 from pathlib import Path
 
 from .config import CONFIG_NAME
 
 DIR_NAME = ".agentize"
+HOME_ENV = "AGENTIZE_HOME"
 GITIGNORE_NAME = ".gitignore"
 
 GITIGNORE = """\
@@ -33,6 +35,12 @@ def config_path(project_root: Path) -> Path:
 
 def data_dir(project_root: Path) -> Path:
     return project_root / DIR_NAME
+
+
+def user_state_dir() -> Path:
+    """The machine-level home (`~/.agentize/` or `$AGENTIZE_HOME`), shared by checkouts."""
+    override = os.environ.get(HOME_ENV)
+    return Path(override) if override else Path.home() / DIR_NAME
 
 
 def host_root(project_root: Path, host: str) -> Path:

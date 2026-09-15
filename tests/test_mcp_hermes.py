@@ -16,7 +16,6 @@ hosts:
   hermes: {}
 profiles:
   human:
-    default: true
     mcp: [postgres, github]
   agent:
     isolate_data: true
@@ -58,7 +57,7 @@ def test_hermes_renders_stdio_and_remote(tmp_path: Path, monkeypatch):
     write(project / "agentize.yaml", CONFIG)
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     target = home / "profiles" / f"{PREFIX}human" / "config.yaml"
     data = servers(target.read_text(encoding="utf-8"))
@@ -81,7 +80,7 @@ def test_agent_profile_writes_into_desktop_home(tmp_path: Path, monkeypatch):
     write(project / "agentize.yaml", CONFIG)
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(project), "mount", "--profile", "agent"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "agent"]) == 0
 
     target = home / "profiles" / f"{PREFIX}agent" / "config.yaml"
     assert sorted(servers(target.read_text(encoding="utf-8"))) == [f"{PREFIX}postgres"]
@@ -97,7 +96,7 @@ def test_bare_mount_plants_human_and_default_agent(tmp_path: Path, monkeypatch):
         "source: .agents\n"
         "hosts:\n  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres, github]\n"
+        "  human:\n    mcp: [postgres, github]\n"
         "agents:\n"
         "  default:\n    isolate_data: true\n    mcp: [postgres]\n"
         "mcp:\n"
@@ -107,7 +106,7 @@ def test_bare_mount_plants_human_and_default_agent(tmp_path: Path, monkeypatch):
     )
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     human = home / "profiles" / f"{PREFIX}human" / "config.yaml"
     agent = home / "profiles" / f"{PREFIX}agent" / "config.yaml"
@@ -136,7 +135,7 @@ def test_unrelated_hermes_servers_are_preserved(tmp_path: Path, monkeypatch):
         ),
     )
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     payload = yaml.safe_load((dest / "config.yaml").read_text(encoding="utf-8"))
     assert payload["model"] == "keep-me"
@@ -153,7 +152,7 @@ def test_switching_profile_drops_stale_prefixed_keys(tmp_path: Path, monkeypatch
         "source: .agents\n"
         "hosts:\n  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres, github]\n"
+        "  human:\n    mcp: [postgres, github]\n"
         "  slim:\n    mcp: [postgres]\n"
         "mcp:\n"
         "  servers:\n"
@@ -162,7 +161,7 @@ def test_switching_profile_drops_stale_prefixed_keys(tmp_path: Path, monkeypatch
     )
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
     dest = home / "profiles" / f"{PREFIX}human" / "config.yaml"
     assert f"{PREFIX}github" in servers(dest.read_text(encoding="utf-8"))
 
@@ -172,13 +171,13 @@ def test_switching_profile_drops_stale_prefixed_keys(tmp_path: Path, monkeypatch
         "source: .agents\n"
         "hosts:\n  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres]\n"
+        "  human:\n    mcp: [postgres]\n"
         "mcp:\n"
         "  servers:\n"
         "    postgres:\n      command: [postgres-mcp]\n"
         "    github:\n      url: https://api.example.com/mcp\n",
     )
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
     assert f"{PREFIX}github" not in servers(dest.read_text(encoding="utf-8"))
 
 
@@ -188,12 +187,12 @@ def test_disabled_host_writes_nothing(tmp_path: Path, monkeypatch):
     write(
         project / "agentize.yaml",
         "version: 1\nsource: .agents\nhosts:\n  hermes: { enabled: false }\n"
-        "profiles:\n  human:\n    default: true\n    mcp: [postgres]\n"
+        "profiles:\n  human:\n    mcp: [postgres]\n"
         "mcp:\n  servers:\n    postgres:\n      command: [srv]\n",
     )
     write(project / ".agents" / "shared" / "style.mdc", "style\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
     assert not (home / "profiles").exists()
 
 
@@ -274,7 +273,7 @@ def test_drop_stale_named_profiles_leaves_the_chosen_root(tmp_path: Path, monkey
     identity = parse_config(
         {
             "version": 1,
-            "profiles": {"human": {"default": True}},
+            "profiles": {"human": {}},
         }
     ).profiles["human"]
 
@@ -291,7 +290,7 @@ def test_hermes_copies_skillize_root_skills(tmp_path: Path, monkeypatch):
     write(project / "agentize.yaml", CONFIG)
     write(project / ".agents" / "skills" / "review" / "SKILL.md", "# review\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
@@ -304,7 +303,7 @@ def test_hermes_copies_a_skill_into_the_profile_home(tmp_path: Path, monkeypatch
     write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
     write(project / ".agents" / "shared" / "skills" / "review" / "checklist.md", "one\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
@@ -321,7 +320,7 @@ def test_hermes_host_layer_wins_the_whole_skill(tmp_path: Path, monkeypatch):
     write(project / ".agents" / "shared" / "skills" / "review" / "extra.md", "helper\n")
     write(project / ".agents" / "hosts" / "hermes" / "skills" / "review" / "SKILL.md", "# hermes\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# hermes\n"
@@ -337,14 +336,14 @@ def test_hermes_profile_selection_narrows_skills(tmp_path: Path, monkeypatch):
         "source: .agents\n"
         "hosts:\n  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres]\n    skills: [review]\n"
+        "  human:\n    mcp: [postgres]\n    skills: [review]\n"
         "  agent:\n    isolate_data: true\n    mcp: [postgres]\n    skills: [review]\n"
         "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
     )
     write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
     write(project / ".agents" / "shared" / "skills" / "deploy" / "SKILL.md", "# deploy\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     human = home / "profiles" / f"{PREFIX}human" / "skills"
     agent = home / "profiles" / f"{PREFIX}agent" / "skills"
@@ -362,7 +361,7 @@ def test_a_hand_written_hermes_skill_survives(tmp_path: Path, monkeypatch):
     mine = home / "profiles" / f"{PREFIX}human" / "skills" / "github"
     write(mine / "SKILL.md", "# bundled\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     assert (mine / "SKILL.md").read_text(encoding="utf-8") == "# bundled\n"
     assert (
@@ -381,13 +380,13 @@ def test_removing_a_source_skill_deletes_the_hermes_tree(tmp_path: Path, monkeyp
     write(project / "agentize.yaml", CONFIG)
     skill = project / ".agents" / "shared" / "skills" / "review"
     write(skill / "SKILL.md", "# review\n")
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
     emitted = home / "profiles" / f"{PREFIX}human" / "skills" / "agentize" / "review"
     assert emitted.is_dir()
 
     (skill / "SKILL.md").unlink()
     skill.rmdir()
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
     assert not emitted.exists()
 
 
@@ -400,12 +399,12 @@ def test_a_hermes_profile_asking_for_an_absent_skill_fails(tmp_path: Path, monke
         "source: .agents\n"
         "hosts:\n  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres]\n    skills: [review]\n"
+        "  human:\n    mcp: [postgres]\n    skills: [review]\n"
         "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
     )
     write(project / ".agents" / "shared" / "skills" / "deploy" / "SKILL.md", "# deploy\n")
 
-    assert main(["-C", str(project), "mount"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 1
     assert "review" in capsys.readouterr().err
 
 
@@ -420,7 +419,7 @@ def test_a_cursor_scoped_skill_does_not_fail_hermes(tmp_path: Path, monkeypatch)
         "  cursor:\n    emit_prefix: agentize.auto.generated.\n"
         "  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres]\n    skills: [graphify]\n"
+        "  human:\n    mcp: [postgres]\n    skills: [graphify]\n"
         "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
     )
     write(
@@ -428,7 +427,8 @@ def test_a_cursor_scoped_skill_does_not_fail_hermes(tmp_path: Path, monkeypatch)
         "# cursor\n",
     )
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     # Cursor plants the skill it owns; Hermes must not fail on it.
     assert (
@@ -450,7 +450,7 @@ def test_per_host_skill_selection(tmp_path: Path, monkeypatch):
         "  cursor:\n    emit_prefix: agentize.auto.generated.\n"
         "  hermes: {}\n"
         "profiles:\n"
-        "  human:\n    default: true\n    mcp: [postgres]\n"
+        "  human:\n    mcp: [postgres]\n"
         "    skills:\n"
         "      cursor: [graphify]\n"
         "      hermes: [review]\n"
@@ -462,7 +462,8 @@ def test_per_host_skill_selection(tmp_path: Path, monkeypatch):
     )
     write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     # Cursor narrows to graphify (its own layer), Hermes to review (shared).
     assert (
@@ -482,12 +483,12 @@ def test_hermes_skills_land_under_the_agentize_category(tmp_path: Path, monkeypa
         "version: 1\n"
         "source: .agents\n"
         "hosts:\n  hermes: {}\n"
-        "profiles:\n  human:\n    default: true\n    mcp: [postgres]\n"
+        "profiles:\n  human:\n    mcp: [postgres]\n"
         "mcp:\n  servers:\n    postgres:\n      command: [postgres-mcp]\n",
     )
     write(project / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "hermes", "--profile", "human"]) == 0
 
     skills_root = home / "profiles" / f"{PREFIX}human" / "skills"
     assert (skills_root / "agentize" / "review" / "SKILL.md").is_file()

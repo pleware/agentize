@@ -130,7 +130,7 @@ def test_run_agent_without_ignite_toml_fails(tmp_path: Path, monkeypatch, capsys
     monkeypatch.setattr(
         "agentize.cli.executable", lambda root, host, use_global: f"/bin/{host.name}"
     )
-    assert main(["-C", str(tmp_path), "run", "--agent", "php"]) == 1
+    assert main(["-C", str(tmp_path), "run", "--host", "opencode", "--agent", "php"]) == 1
     assert "ignite.toml" in capsys.readouterr().err
 
 
@@ -140,7 +140,7 @@ def test_run_profile_does_not_call_ensure(tmp_path: Path, monkeypatch):
         tmp_path / "agentize.yaml",
         "version: 1\n"
         "hosts:\n  opencode: {}\n"
-        "profiles:\n  human:\n    default: true\n",
+        "profiles:\n  human:\n",
     )
     called = {"n": 0}
 
@@ -153,7 +153,7 @@ def test_run_profile_does_not_call_ensure(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(
         "agentize.cli.executable", lambda root, host, use_global: f"/bin/{host.name}"
     )
-    assert main(["-C", str(tmp_path), "run", "--profile", "human"]) == 0
+    assert main(["-C", str(tmp_path), "run", "--host", "opencode", "--profile", "human"]) == 0
     assert called["n"] == 0
 
 

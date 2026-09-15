@@ -27,9 +27,6 @@ def test_readme_example_parses_fully():
     assert set(config.hosts) == {"cursor", "opencode", "hermes", "claude", "codex"}
     assert config.hosts["cursor"].emit_prefix == "agentize.auto.generated."
     assert config.hosts["cursor"].pin == "latest"
-    assert not config.hosts["cursor"].default
-    assert config.hosts["opencode"].default
-    assert config.default_host is config.hosts["opencode"]
     assert config.hosts["opencode"].plugins == (
         "opencode-extended-sidebar",
         "oh-my-openagent",
@@ -44,7 +41,6 @@ def test_readme_example_parses_fully():
     }
 
     human = config.profiles["human"]
-    assert config.default_profile is human
     assert human.git is None
     php = config.resolve_agent("php")
     assert php.origin == "agent"
@@ -107,12 +103,6 @@ def test_profile_referencing_unknown_server():
         "mcp": {"servers": {"postgres": {"command": ["postgres-mcp"]}}},
     }
     with pytest.raises(ConfigError, match="unknown server 'nope'.*defined: postgres"):
-        parse_config(raw)
-
-
-def test_two_default_profiles_is_an_error():
-    raw = {"version": 1, "profiles": {"a": {"default": True}, "b": {"default": True}}}
-    with pytest.raises(ConfigError, match="more than one default profile: a, b"):
         parse_config(raw)
 
 
@@ -223,7 +213,7 @@ def test_every_declared_identity_is_labelled_once():
     config = parse_config(
         {
             "version": 1,
-            "profiles": {"human": {"default": True}},
+            "profiles": {"human": {}},
             "agents": {"default": {"mcp": []}, "php": {}},
         }
     )
@@ -240,7 +230,7 @@ def test_a_profile_shadows_an_agent_slug_with_the_same_label():
     config = parse_config(
         {
             "version": 1,
-            "profiles": {"agent": {"default": True}},
+            "profiles": {"agent": {}},
             "agents": {"default": {}},
         }
     )

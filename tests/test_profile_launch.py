@@ -19,7 +19,7 @@ CONFIG = parse_config(
         "version": 1,
         "hosts": {"opencode": {}, "claude": {"enabled": False}},
         "profiles": {
-            "human": {"default": True},
+            "human": {},
             "agent": {
                 "isolate_data": True,
                 "git": {
@@ -39,11 +39,12 @@ AGENT = CONFIG.profiles["agent"]
 # --- profile selection ---
 
 
-def test_the_default_profile_is_used_when_none_is_named():
-    assert CONFIG.select_profile(None) is HUMAN
+def test_no_profile_named_is_an_error():
+    with pytest.raises(ConfigError, match="a profile is required"):
+        CONFIG.select_profile(None)
 
 
-def test_an_explicit_profile_overrides_the_default():
+def test_an_explicit_profile_is_accepted():
     assert CONFIG.select_profile("agent") is AGENT
 
 
@@ -52,9 +53,9 @@ def test_an_unknown_profile_lists_the_declared_ones():
         CONFIG.select_profile("robot")
 
 
-def test_without_a_default_a_profile_must_be_named():
+def test_a_profile_must_be_named_even_without_a_default():
     config = parse_config({"version": 1, "profiles": {"a": {}, "b": {}}})
-    with pytest.raises(ConfigError, match="no profile is marked default"):
+    with pytest.raises(ConfigError, match="a profile is required"):
         config.select_profile(None)
 
 
@@ -120,8 +121,13 @@ def test_the_identity_actually_reaches_git(tmp_path: Path):
 # --- host selection ---
 
 
-def test_the_only_enabled_host_needs_no_flag():
-    assert select_host(CONFIG, None).name == "opencode"
+def test_no_host_named_is_an_error():
+    with pytest.raises(AgentizeError, match="a host is required"):
+        select_host(CONFIG, None)
+
+
+def test_an_explicit_host_is_accepted():
+    assert select_host(CONFIG, "opencode").name == "opencode"
 
 
 def test_a_disabled_host_cannot_be_launched():
@@ -129,60 +135,9 @@ def test_a_disabled_host_cannot_be_launched():
         select_host(CONFIG, "claude")
 
 
-def test_several_enabled_hosts_require_a_choice():
-    config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
-    with pytest.raises(AgentizeError, match="more than one host is enabled"):
-        select_host(config, None)
-
-
-def test_a_default_host_breaks_the_first_run_tie():
-    config = parse_config(
-        {"version": 1, "hosts": {"cursor": {"default": True}, "opencode": {}}}
-    )
-    assert select_host(config, None).name == "cursor"
-
-
-def test_two_default_hosts_are_rejected():
-    with pytest.raises(ConfigError, match="more than one default host"):
-        parse_config(
-            {
-                "version": 1,
-                "hosts": {
-                    "cursor": {"default": True},
-                    "opencode": {"default": True},
-                },
-            }
-        )
-
-
-def test_memory_beats_the_default_host():
-    config = parse_config(
-        {"version": 1, "hosts": {"cursor": {"default": True}, "opencode": {}}}
-    )
-    assert select_host(config, None, "opencode").name == "opencode"
-
-
-def test_the_remembered_host_breaks_the_tie():
-    config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
-    assert select_host(config, None, "opencode").name == "opencode"
-
-
-def test_a_flag_beats_the_remembered_host():
-    config = parse_config({"version": 1, "hosts": {"cursor": {}, "opencode": {}}})
-    assert select_host(config, "cursor", "opencode").name == "cursor"
-
-
-def test_a_stale_memory_is_ignored_if_that_host_is_off():
-    config = parse_config(
-        {"version": 1, "hosts": {"cursor": {}, "opencode": {"enabled": False}}}
-    )
-    assert select_host(config, None, "opencode").name == "cursor"
-
-
-def test_no_enabled_host_is_an_error():
-    config = parse_config({"version": 1, "hosts": {"cursor": {"enabled": False}}})
-    with pytest.raises(AgentizeError, match="no host is enabled"):
-        select_host(config, None)
+def test_an_unknown_host_is_not_enabled():
+    with pytest.raises(AgentizeError, match="is not enabled"):
+        select_host(CONFIG, "nope")
 
 
 # --- data isolation ---

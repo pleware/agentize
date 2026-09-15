@@ -79,7 +79,7 @@ def test_cli_fetch_skips_hermes_when_it_is_not_installed(
     (tmp_path / "agentize.yaml").write_text(
         "version: 1\n"
         "hosts:\n  hermes: {}\n  opencode:\n    pin: 1.2.3\n"
-        "profiles:\n  human:\n    default: true\n",
+        "profiles:\n  human:\n",
         encoding="utf-8",
     )
 
@@ -276,7 +276,7 @@ def test_opencode_latest_does_not_care_that_the_binary_self_updated(tmp_path: Pa
 
 def test_cli_fetch_installs_the_enabled_host(tmp_path: Path, monkeypatch):
     (tmp_path / "agentize.yaml").write_text(
-        "version: 1\nhosts:\n  opencode:\n    pin: 1.2.3\nprofiles:\n  human:\n    default: true\n",
+        "version: 1\nhosts:\n  opencode:\n    pin: 1.2.3\nprofiles:\n  human:\n",
         encoding="utf-8",
     )
 
@@ -294,8 +294,8 @@ def test_cli_fetch_installs_the_enabled_host(tmp_path: Path, monkeypatch):
 def test_cli_run_without_a_copy_names_fetch(tmp_path: Path, capsys, monkeypatch):
     monkeypatch.setenv("AGENTIZE_HOME", str(tmp_path / "home"))
     (tmp_path / "agentize.yaml").write_text(
-        "version: 1\nhosts:\n  opencode:\n    pin: 1.2.3\nprofiles:\n  human:\n    default: true\n",
+        "version: 1\nhosts:\n  opencode:\n    pin: 1.2.3\nprofiles:\n  human:\n",
         encoding="utf-8",
     )
-    assert main(["-C", str(tmp_path), "run"]) == 1
+    assert main(["-C", str(tmp_path), "run", "--host", "opencode", "--profile", "human"]) == 1
     assert "agentize fetch" in capsys.readouterr().err

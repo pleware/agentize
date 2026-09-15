@@ -25,7 +25,6 @@ hosts:
     emit_prefix: agentize.auto.generated.
 profiles:
   human:
-    default: true
     mcp: [orchestrator, atlassian]
 mcp:
   servers:
@@ -76,7 +75,7 @@ def test_render_keeps_foreign_keys_and_drops_stale_prefix(tmp_path: Path):
         }
     }
     config = parse_config(yaml.safe_load(PARENT))
-    wanted = collect_user_mcp_servers(tmp_path, config, config.default_profile)
+    wanted = collect_user_mcp_servers(tmp_path, config, config.select_profile("human"))
     rendered = render_user_mcp(existing, wanted)
     servers = rendered["mcpServers"]
     assert "wren" in servers
@@ -97,7 +96,7 @@ def test_collect_unions_child_yaml(tmp_path: Path):
     )
     write(child / "agentize.yaml", PARENT)
     config = parse_config(yaml.safe_load((parent / "agentize.yaml").read_text(encoding="utf-8")))
-    wanted = collect_user_mcp_servers(parent, config, config.default_profile)
+    wanted = collect_user_mcp_servers(parent, config, config.select_profile("human"))
     orch = wanted["agentize-orchestrator"]
     assert Path(orch.command[3]) == (child / "family/orch").resolve()
 
@@ -115,7 +114,7 @@ def test_inherit_only_grandchild_does_not_double_directory(tmp_path: Path):
         yaml.safe_dump({"projects": {"erp": {"path": "erp"}, "family": {"path": "family"}}}),
     )
     config = parse_config(yaml.safe_load(PARENT))
-    wanted = collect_user_mcp_servers(parent, config, config.default_profile)
+    wanted = collect_user_mcp_servers(parent, config, config.select_profile("human"))
     assert Path(wanted["agentize-orchestrator"].command[3]) == (parent / "family/orch").resolve()
 
 
@@ -123,7 +122,7 @@ def test_plan_and_strip_roundtrip(tmp_path: Path):
     path = tmp_path / ".cursor" / "mcp.json"
     write(path, json.dumps({"mcpServers": {"wren": {"command": "wren"}}}))
     config = parse_config(yaml.safe_load(PARENT))
-    wanted = collect_user_mcp_servers(tmp_path, config, config.default_profile)
+    wanted = collect_user_mcp_servers(tmp_path, config, config.select_profile("human"))
     plan = plan_user_mcp(wanted, path=path)
     assert plan.writes
     path.write_bytes(plan.writes[0].content)

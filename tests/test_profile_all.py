@@ -26,7 +26,6 @@ hosts:
   opencode: {enabled: true}
 profiles:
   human:
-    default: true
     mcp: [pg]
     skills: [review]
 agents:
@@ -69,7 +68,7 @@ def mcp_keys(project: Path, rel: str = ".cursor/mcp.json") -> list[str]:
 
 
 def test_every_identity_gets_its_own_rule_files(project: Path):
-    assert main(["-C", str(project), "mount", "--profile-all"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"]) == 0
 
     assert names(project / ".cursor" / "rules") == [
         "agentize.auto.generated.agent.style.mdc",
@@ -81,7 +80,8 @@ def test_every_identity_gets_its_own_rule_files(project: Path):
 
 
 def test_skills_land_in_per_identity_directories(project: Path):
-    main(["-C", str(project), "mount", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile-all"])
 
     assert names(project / ".cursor" / "skills") == [
         "agentize.auto.generated.agent.review",
@@ -96,14 +96,15 @@ def test_skills_land_in_per_identity_directories(project: Path):
 
 
 def test_mcp_keys_say_which_identity_owns_them(project: Path):
-    main(["-C", str(project), "mount", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile-all"])
 
     assert mcp_keys(project) == ["agent.pg", "human.pg", "php.pg"]
     assert mcp_keys(project, "opencode.json") == ["agent.pg", "human.pg", "php.pg"]
 
 
 def test_agents_md_carries_one_section_per_identity(project: Path):
-    main(["-C", str(project), "mount", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"])
 
     text = (project / "AGENTS.md").read_text(encoding="utf-8")
     assert "### human (profile)" in text
@@ -113,15 +114,15 @@ def test_agents_md_carries_one_section_per_identity(project: Path):
 
 
 def test_the_pass_is_idempotent_and_check_is_clean(project: Path):
-    main(["-C", str(project), "mount", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"])
 
-    assert main(["-C", str(project), "mount", "--profile-all", "--check"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile-all", "--check"]) == 0
 
 
 def test_one_identity_prunes_the_qualified_files(project: Path):
-    main(["-C", str(project), "mount", "--profile-all"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"])
 
-    assert main(["-C", str(project), "mount", "--profile", "human"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     assert names(project / ".cursor" / "rules") == [
         "agentize.auto.generated.do-not-edit.mdc",
@@ -132,7 +133,7 @@ def test_one_identity_prunes_the_qualified_files(project: Path):
 
 
 def test_profile_all_with_an_explicit_identity_is_refused(project: Path, capsys):
-    assert main(["-C", str(project), "mount", "--profile-all", "--agent", "php"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile-all", "--agent", "php"]) == 1
 
     assert "not both" in capsys.readouterr().err
 
@@ -148,7 +149,7 @@ def test_cascade_plants_every_identity_into_one_file(tmp_path: Path):
     write(ws / ".agents" / "shared" / "skills" / "review" / "SKILL.md", "# review\n")
     write(ws / "mani.yaml", yaml.safe_dump({"projects": {"child": {"path": "child"}}}))
 
-    assert main(["-C", str(ws), "mount", "--profile-all"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile-all"]) == 0
 
     data = json.loads((ws / "child" / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
     assert sorted(data["mcpServers"]) == ["agent.pg", "human.pg", "php.pg"]

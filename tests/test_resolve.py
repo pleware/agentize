@@ -11,7 +11,7 @@ CONFIG = parse_config(
     {
         "version": 1,
         "hosts": {"cursor": {}, "opencode": {}, "claude": {"enabled": False}},
-        "profiles": {"human": {"default": True}, "agent": {}},
+        "profiles": {"human": {}, "agent": {}},
     }
 )
 

@@ -24,7 +24,6 @@ hosts:
   opencode: {}
 profiles:
   human:
-    default: true
   agent:
     skills: [review]
 """
@@ -151,7 +150,7 @@ def test_a_whole_skill_directory_is_copied(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
     write(project / ".agents/shared/skills/review/checklist.md", "one\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     emitted = project / ".cursor/skills/agentize.auto.generated.review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# review\n"
@@ -161,7 +160,7 @@ def test_a_whole_skill_directory_is_copied(project: Path):
 def test_skillize_root_skills_are_copied(project: Path):
     write(project / ".agents/skills/review/SKILL.md", "# review\n")
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").read_text(
         encoding="utf-8"
@@ -172,7 +171,7 @@ def test_shared_layer_beats_a_skillize_root_skill(project: Path):
     write(project / ".agents/skills/review/SKILL.md", "# skillize\n")
     write(project / ".agents/shared/skills/review/SKILL.md", "# shared\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").read_text(
         encoding="utf-8"
@@ -182,7 +181,8 @@ def test_shared_layer_beats_a_skillize_root_skill(project: Path):
 def test_each_host_gets_its_own_copy(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
+    main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
 
     assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").is_file()
     assert (project / ".opencode/skills/agentize.auto.generated.review/SKILL.md").is_file()
@@ -191,7 +191,7 @@ def test_each_host_gets_its_own_copy(project: Path):
 def test_skills_never_land_in_a_shared_directory(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
 
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     for shared in (".agents/skills", ".claude/skills", ".codex/skills"):
         assert not (project / shared).exists()
@@ -202,7 +202,7 @@ def test_the_profile_layer_wins_whole(project: Path):
     write(project / ".agents/shared/skills/review/extra.md", "shared helper\n")
     write(project / ".agents/profiles/agent/skills/review/SKILL.md", "# agent\n")
 
-    main(["-C", str(project), "mount", "--profile", "agent"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
 
     emitted = project / ".cursor/skills/agentize.auto.generated.review"
     assert (emitted / "SKILL.md").read_text(encoding="utf-8") == "# agent\n"
@@ -213,7 +213,7 @@ def test_a_profile_selection_excludes_the_rest(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
     write(project / ".agents/shared/skills/deploy/SKILL.md", "# deploy\n")
 
-    main(["-C", str(project), "mount", "--profile", "agent"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
 
     assert (project / ".cursor/skills/agentize.auto.generated.review").is_dir()
     assert not (project / ".cursor/skills/agentize.auto.generated.deploy").exists()
@@ -222,12 +222,12 @@ def test_a_profile_selection_excludes_the_rest(project: Path):
 def test_removing_a_source_skill_deletes_the_emitted_tree(project: Path):
     skill = project / ".agents/shared/skills/review"
     write(skill / "SKILL.md", "# review\n")
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
     assert (project / ".cursor/skills/agentize.auto.generated.review").is_dir()
 
     (skill / "SKILL.md").unlink()
     skill.rmdir()
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     assert not (project / ".cursor/skills/agentize.auto.generated.review").exists()
 
@@ -236,10 +236,10 @@ def test_a_file_dropped_from_a_live_skill_is_removed(project: Path):
     skill = project / ".agents/shared/skills/review"
     write(skill / "SKILL.md", "# review\n")
     write(skill / "checklist.md", "one\n")
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     (skill / "checklist.md").unlink()
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     assert (project / ".cursor/skills/agentize.auto.generated.review/SKILL.md").is_file()
     assert not (project / ".cursor/skills/agentize.auto.generated.review/checklist.md").exists()
@@ -249,34 +249,34 @@ def test_a_hand_written_skill_survives(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
     write(project / ".cursor/skills/mine/SKILL.md", "# mine\n")
 
-    main(["-C", str(project), "mount"])
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     assert (project / ".cursor/skills/mine/SKILL.md").read_text(encoding="utf-8") == "# mine\n"
 
 
 def test_a_second_mount_touches_nothing(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
-    main(["-C", str(project), "mount"])
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
 
     emitted = project / ".cursor/skills/agentize.auto.generated.review/SKILL.md"
     before = emitted.stat().st_mtime_ns
 
-    assert main(["-C", str(project), "mount"]) == 0
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert emitted.stat().st_mtime_ns == before
 
 
 def test_check_reports_a_missing_skill(project: Path):
     write(project / ".agents/shared/skills/review/SKILL.md", "# review\n")
 
-    assert main(["-C", str(project), "mount", "--check"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human", "--check"]) == 1
     assert not (project / ".cursor/skills").exists()
 
 
 def test_a_profile_asking_for_an_absent_skill_fails(project: Path, capsys):
     write(project / ".agents/shared/skills/deploy/SKILL.md", "# deploy\n")
 
-    assert main(["-C", str(project), "mount", "--profile", "agent"]) == 1
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"]) == 1
     assert "review" in capsys.readouterr().err
 
 

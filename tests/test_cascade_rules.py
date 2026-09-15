@@ -14,7 +14,7 @@ source: .agents
 hosts:
   cursor: {}
 profiles:
-  human: {default: true, mcp: []}
+  human: {mcp: []}
 """
 
 
@@ -40,7 +40,7 @@ def test_a_binder_rule_descends_into_every_child(tmp_path: Path):
     )
     write(ws / "mani.yaml", yaml.safe_dump({"projects": {"child": {"path": "child"}}}))
 
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     assert "agentize.auto.generated.git-index-flags.mdc" in rule_names(ws)
     assert "agentize.auto.generated.git-index-flags.mdc" in rule_names(child)
@@ -56,7 +56,7 @@ def test_the_nearest_owner_wins_on_a_filename(tmp_path: Path):
     write(child / "agentize.yaml", "version: 1\nsource: .agents\nhosts:\n  cursor: {}\n")
     write(child / ".agents" / "cascade" / "git-index-flags.mdc", "child rule\n")
 
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     assert (ws / ".cursor" / "rules" / "agentize.auto.generated.git-index-flags.mdc").read_text(
         encoding="utf-8"
@@ -77,10 +77,10 @@ def test_a_child_mount_keeps_the_inherited_rule(tmp_path: Path):
     )
     write(ws / "mani.yaml", yaml.safe_dump({"projects": {"child": {"path": "child"}}}))
 
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
     # A child's own mount re-derives the rule from its ancestors and keeps it,
     # rather than pruning it as stale.
-    assert main(["-C", str(child), "mount"]) == 0
+    assert main(["-C", str(child), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert "agentize.auto.generated.git-index-flags.mdc" in rule_names(child)
 
 
@@ -92,7 +92,7 @@ def test_mount_check_with_cascade_rules_still_writes_nothing(tmp_path: Path):
     write(ws / ".agents" / "cascade" / "git-index-flags.mdc", "---\nalwaysApply: true\n---\n\nx\n")
     write(ws / "mani.yaml", yaml.safe_dump({"projects": {"child": {"path": "child"}}}))
 
-    assert main(["-C", str(ws), "mount", "--check"]) == 1
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human", "--check"]) == 1
 
     assert not (ws / ".agentize").exists()
     assert not (ws / ".cursor").exists()

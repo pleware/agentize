@@ -22,7 +22,6 @@ hosts:
     emit_prefix: agentize.auto.generated.
 profiles:
   human:
-    default: true
     mcp: [orchestrator, atlassian]
 mcp:
   servers:
@@ -39,7 +38,6 @@ hosts:
   cursor: {}
 profiles:
   human:
-    default: true
     mcp: [atlassian]
 mcp:
   servers:
@@ -94,7 +92,7 @@ def test_mount_plants_mcp_on_existing_children(tmp_path: Path):
     erp.mkdir()
     mani_projects(ws, self=".", erp="erp", missing="no-such-dir")
 
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     servers = cursor_servers(erp)
     assert servers["orchestrator"]["args"] == [
@@ -121,7 +119,7 @@ def test_missing_child_is_skipped_not_an_error(tmp_path: Path):
     write(ws / "agentize.yaml", PARENT)
     write(ws / ".agents" / "shared" / "style.mdc", "style\n")
     mani_projects(ws, ghost="ghost")
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert not (ws / "ghost").exists()
 
 
@@ -133,7 +131,7 @@ def test_inherit_false_skips_mcp(tmp_path: Path):
     write(landing / "agentize.yaml", "version: 1\ninherit: false\n")
     mani_projects(ws, landing="landing")
 
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert not (landing / ".cursor" / "mcp.json").exists()
     assert (landing / ".agentize" / "parents.yaml").is_file()
     assert (landing / ".cursor" / "rules" / "agentize.auto.generated.do-not-edit.mdc").is_file()
@@ -148,7 +146,7 @@ def test_child_mcp_list_filters_parent_servers(tmp_path: Path):
     write(react / ".agents" / "shared" / "style.mdc", "react\n")
     mani_projects(ws, react="react")
 
-    assert main(["-C", str(ws), "mount"]) == 0
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert list(cursor_servers(react)) == ["atlassian"]
 
 
@@ -160,7 +158,7 @@ def test_mount_in_child_without_yaml_inherits(tmp_path: Path):
     erp.mkdir()
     mani_projects(ws, erp="erp")
 
-    assert main(["-C", str(erp), "mount"]) == 0
+    assert main(["-C", str(erp), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert "orchestrator" in cursor_servers(erp)
     assert cursor_servers(erp)["orchestrator"]["args"][2] == "../family/orchestrator"
 
@@ -171,7 +169,7 @@ def test_recursive_mani_walk(tmp_path: Path):
     erp = ws / "erp"
     write(
         binder / "agentize.yaml",
-        "version: 1\nhosts:\n  cursor: {}\nprofiles:\n  human:\n    default: true\n    mcp: []\n",
+        "version: 1\nhosts:\n  cursor: {}\nprofiles:\n  human:\n    mcp: []\n",
     )
     write(ws / "agentize.yaml", PARENT)
     write(ws / ".agents" / "shared" / "style.mdc", "style\n")
@@ -181,7 +179,7 @@ def test_recursive_mani_walk(tmp_path: Path):
     mani_projects(ws, erp="erp")
     write(ws / "ignite.toml", '[workspace-tree]\nkind = "workspace"\n')
 
-    assert main(["-C", str(binder), "mount"]) == 0
+    assert main(["-C", str(binder), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert "orchestrator" in cursor_servers(erp)
     assert cursor_servers(ws)["orchestrator"]["args"][2] == "family/orchestrator"
     assert cursor_servers(erp)["orchestrator"]["args"][2] == "../family/orchestrator"
@@ -227,12 +225,12 @@ def test_empty_parent_does_not_plant_empty_mcp_on_bare_child(tmp_path: Path):
     pware.mkdir(parents=True)
     write(
         binder / "agentize.yaml",
-        "version: 1\nhosts:\n  cursor: {}\nprofiles:\n  human:\n    default: true\n    mcp: []\n",
+        "version: 1\nhosts:\n  cursor: {}\nprofiles:\n  human:\n    mcp: []\n",
     )
     write(binder / ".agents" / "shared" / "style.mdc", "x\n")
     mani_projects(binder, pware="pware")
 
-    assert main(["-C", str(binder), "mount"]) == 0
+    assert main(["-C", str(binder), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert not (pware / ".cursor" / "mcp.json").exists()
     assert (pware / ".agentize" / "parents.yaml").is_file()
 
@@ -256,7 +254,7 @@ def test_mount_check_writes_nothing(tmp_path: Path):
     erp.mkdir()
     mani_projects(ws, erp="erp")
 
-    assert main(["-C", str(ws), "mount", "--check"]) == 1
+    assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human", "--check"]) == 1
 
     assert not (ws / ".agentize").exists()
     assert not (ws / ".cursor").exists()
@@ -270,7 +268,7 @@ CHILD_INHERIT_SKILLS = (
     "source: .agents\n"
     "hosts:\n  cursor: {}\n"
     "inherit: [skills]\n"
-    "profiles:\n  human:\n    default: true\n"
+    "profiles:\n  human:\n"
 )
 
 
@@ -282,7 +280,7 @@ def test_inherit_skills_pulls_parent_skills(tmp_path: Path):
     write(child / "agentize.yaml", CHILD_INHERIT_SKILLS)
     mani_projects(ws, child="child")
 
-    assert main(["-C", str(child), "mount"]) == 0
+    assert main(["-C", str(child), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     emitted = child / ".cursor" / "skills" / "agentize.auto.generated.review" / "SKILL.md"
     assert emitted.read_text(encoding="utf-8") == "# parent review\n"
@@ -296,11 +294,11 @@ def test_inherit_default_excludes_skills(tmp_path: Path):
     write(
         child / "agentize.yaml",
         "version: 1\nsource: .agents\nhosts:\n  cursor: {}\n"
-        "profiles:\n  human:\n    default: true\n",
+        "profiles:\n  human:\n",
     )
     mani_projects(ws, child="child")
 
-    assert main(["-C", str(child), "mount"]) == 0
+    assert main(["-C", str(child), "mount", "--host", "cursor", "--profile", "human"]) == 0
     assert not (child / ".cursor" / "skills" / "agentize.auto.generated.review").exists()
 
 
@@ -314,7 +312,7 @@ def test_child_skill_shadows_inherited_parent_skill(tmp_path: Path):
     write(child / ".agents" / "skills" / "review" / "SKILL.md", "# child\n")
     mani_projects(ws, child="child")
 
-    assert main(["-C", str(child), "mount"]) == 0
+    assert main(["-C", str(child), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     skills_root = child / ".cursor" / "skills"
     assert (skills_root / "agentize.auto.generated.review" / "SKILL.md").read_text(
