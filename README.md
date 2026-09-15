@@ -187,7 +187,7 @@ those profile directories. The default Hermes Desktop home is not rewritten.
 
 `agentize cleanup` (or `--cleanup`) is the inverse of `init`.
 
-<small>It deletes <code>.agentize/</code> and any launcher whose bytes still match the planted trampoline. A hand-edited launcher stays. <code>agentize.yaml</code> stays. Files <code>mount</code> wrote (<code>.cursor/</code>, <code>opencode.json</code>, <code>tui.json</code>, <code>AGENTS.md</code>) stay. <code>--home</code> also deletes <code>~/.agentize/</code> (<code>$AGENTIZE_HOME</code> if set), prefixed Cursor user-MCP keys, and <code>agentize-*</code> Hermes profiles under the detected Hermes home. <code>--check</code> reports without deleting.</small>
+<small>It deletes <code>.agentize/</code> and any launcher whose bytes still match the planted trampoline. A hand-edited launcher stays. <code>agentize.yaml</code> stays. Files <code>mount</code> wrote (<code>.cursor/</code>, <code>opencode.json</code>, <code>tui.json</code>, <code>AGENTS.md</code>) stay — they are ignored and regenerated per worker, so cleanup leaves them. <code>--home</code> also deletes <code>~/.agentize/</code> (<code>$AGENTIZE_HOME</code> if set), prefixed Cursor user-MCP keys, and <code>agentize-*</code> Hermes profiles under the detected Hermes home. <code>--check</code> reports without deleting.</small>
 
 ### Isolated hosts
 
@@ -379,6 +379,15 @@ worktree:
       cursor/                same shape; the binary inside is the agent CLI
   .agents/             rules and project-owned skills — commit these
 
+  # rendered per worker — ignored, never committed (see Gitignore):
+  .cursor/mcp.json       Cursor MCP servers (agentize-* keys)
+  .cursor/rules/agentize.auto.generated.*   generated rules
+  .cursor/skills/agentize.auto.generated.*  copied skills
+  .opencode/skills/agentize.auto.generated.*
+  opencode.json          OpenCode config
+  tui.json               OpenCode TUI plugins
+  AGENTS.md              host-neutral rules index (merged into existing prose)
+
 ~/.agentize/           # or $AGENTIZE_HOME — machine, not the project
   ignite/<pin>/        planted ignite kit (`ensure.sh`); shared by checkouts
 
@@ -486,7 +495,23 @@ This is the short list on purpose. Most of this problem is already solved.
 
 ## Gitignore
 
-A deny-by-default `.gitignore` needs the launchers and the policy file whitelisted:
+Rendered output is ephemeral — a worker regenerates it from `agentize.yaml` on
+every `mount`, so it never belongs in git. `agentize init` appends the rendered
+paths to the root `.gitignore`:
+
+```gitignore
+# agentize: rendered per-worker, not committed
+.cursor/mcp.json
+.cursor/rules/agentize.auto.generated.*
+.cursor/skills/agentize.auto.generated.*
+.opencode/skills/agentize.auto.generated.*
+opencode.json
+tui.json
+```
+
+Hand-written Cursor files — plans, settings, unprefixed rules and skills — stay
+tracked. A deny-by-default `.gitignore` still needs the committed files
+whitelisted:
 
 ```gitignore
 !/agentize
@@ -495,7 +520,7 @@ A deny-by-default `.gitignore` needs the launchers and the policy file whitelist
 !/agentize.yaml
 ```
 
-<small><code>.agentize/</code> holds only machine state, so it ignores itself with a <code>.gitignore</code> containing <code>*</code> — the same trick <code>uv</code> uses for <code>.venv</code>. Your project needs no rule for it, and agentize never edits a <code>.gitignore</code> the project owns. <code>agentize init</code> refuses to continue when <code>agentize.yaml</code> sits behind an ignore rule, because a policy nobody can commit is worse than no policy at all.</small>
+<small>The committed source of truth is <code>agentize.yaml</code> plus <code>.agents/</code>; everything <code>mount</code> renders is a local, ignored artifact. <code>agentize init</code> refuses to continue when <code>agentize.yaml</code> sits behind an ignore rule, because a policy nobody can commit is worse than no policy at all.</small>
 
 ## Licence
 

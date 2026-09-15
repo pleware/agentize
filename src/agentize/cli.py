@@ -29,7 +29,12 @@ from .mount import (
     plan_opencode,
     plan_opencode_all,
 )
-from .store_tree import config_is_ignored, config_path, ensure_data_dir
+from .store_tree import (
+    config_is_ignored,
+    config_path,
+    ensure_data_dir,
+    ensure_rendered_ignored,
+)
 from .user_mcp import (
     collect_all_user_mcp_servers,
     collect_user_mcp_servers,
@@ -153,6 +158,9 @@ def cmd_init(root: Path) -> int:
 
     for path in write_wrappers(root):
         print(f"agentize: launcher {path.name}")
+
+    ensure_rendered_ignored(root)
+    print("agentize: gitignore  opencode.json, tui.json")
 
     if config_is_ignored(root):
         print(

@@ -28,6 +28,16 @@ GITIGNORE = """\
 *
 """
 
+RENDERED_ROOT_BLOCK = (
+    "# agentize: rendered per-worker, not committed\n"
+    ".cursor/mcp.json\n"
+    ".cursor/rules/agentize.auto.generated.*\n"
+    ".cursor/skills/agentize.auto.generated.*\n"
+    ".opencode/skills/agentize.auto.generated.*\n"
+    "opencode.json\n"
+    "tui.json\n"
+)
+
 
 def config_path(project_root: Path) -> Path:
     return project_root / CONFIG_NAME
@@ -81,6 +91,20 @@ def ensure_data_dir(project_root: Path) -> Path:
     if not ignore_file.is_file() or ignore_file.read_text(encoding="utf-8") != GITIGNORE:
         ignore_file.write_text(GITIGNORE, encoding="utf-8", newline="\n")
     return directory
+
+
+def ensure_rendered_ignored(project_root: Path) -> None:
+    """Append the rendered paths to `.gitignore` so a mount never gets committed.
+
+    Only the files agentize renders are ignored — hand-written Cursor files
+    (plans, settings, unprefixed rules and skills) stay tracked. A deny-by-default
+    `.gitignore` already covers them — the entries are redundant but harmless.
+    """
+    ignore = project_root / GITIGNORE_NAME
+    if ignore.is_file() and RENDERED_ROOT_BLOCK in ignore.read_text(encoding="utf-8"):
+        return
+    with ignore.open("a", encoding="utf-8") as handle:
+        handle.write(RENDERED_ROOT_BLOCK)
 
 
 def config_is_ignored(project_root: Path) -> bool:

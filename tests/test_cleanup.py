@@ -113,12 +113,16 @@ def test_cleanup_does_not_unmount_host_files(tmp_path: Path):
     assert cursor_rule.read_text(encoding="utf-8") == "rule\n"
 
 
-def test_the_root_gitignore_is_never_modified(tmp_path: Path):
+def test_init_adds_rendered_ignores_and_cleanup_leaves_them(tmp_path: Path):
     ignore = tmp_path / ".gitignore"
     ignore.write_text("/build\n", encoding="utf-8")
-    before = ignore.read_bytes()
+
     assert main(["-C", str(tmp_path), "init"]) == 0
+    text = ignore.read_text(encoding="utf-8")
+    assert "/build\n" in text  # existing entries survive
+    assert "opencode.json" in text
+    assert "tui.json" in text
 
+    after_init = ignore.read_bytes()
     assert main(["-C", str(tmp_path), "cleanup"]) == 0
-
-    assert ignore.read_bytes() == before
+    assert ignore.read_bytes() == after_init  # cleanup leaves the .gitignore alone

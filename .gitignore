@@ -28,9 +28,10 @@ graphify-out/
 /docs/
 /tasks/
 
-# agentize-generated rules: per-instance, never commit.
-.cursor/rules/agentize.auto.generated*
-
-# agentize-generated skills: per-instance, mount re-emits them.
-.cursor/skills/agentize.auto.generated*
-.opencode/skills/agentize.auto.generated*
+# agentize: rendered per-worker, not committed
+.cursor/mcp.json
+.cursor/rules/agentize.auto.generated.*
+.cursor/skills/agentize.auto.generated.*
+.opencode/skills/agentize.auto.generated.*
+opencode.json
+tui.json
