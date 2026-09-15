@@ -12,7 +12,13 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from ..config import ENV_REF, LspServer, McpServer
+from ..config import (
+    ENV_REF,
+    LspServer,
+    McpServer,
+    merge_owned_mcp,
+    prefixed_mcp_name,
+)
 from ..resolve import ResolvedFile
 
 CONFIG_FILE = "opencode.json"
@@ -96,6 +102,12 @@ def mcp_entry(server: McpServer) -> dict[str, Any]:
     return entry
 
 
+def _render_mcp(existing: Any, servers: Iterable[McpServer]) -> dict[str, Any]:
+    wanted = {prefixed_mcp_name(server.name): mcp_entry(server) for server in servers}
+    originals = {server.name for server in servers}
+    return merge_owned_mcp(existing, wanted, originals)
+
+
 def lsp_entry(server: LspServer) -> dict[str, Any]:
     if server.disabled:
         return {"disabled": True}
@@ -125,7 +137,7 @@ def render_config(
 ) -> str:
     data = dict(existing)
     data[INSTRUCTIONS_KEY] = instruction_paths(resolved, source)
-    data[MCP_KEY] = {server.name: mcp_entry(server) for server in servers}
+    data[MCP_KEY] = _render_mcp(data.get(MCP_KEY), servers)
     data[PLUGIN_KEY] = server_plugin_specs(plugins)
     data[LSP_KEY] = render_lsp(lsp)
     permission = dict(data.get(PERMISSION_KEY) or {})

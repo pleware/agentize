@@ -100,13 +100,13 @@ def test_cursor_renders_stdio_and_remote(project: Path):
     main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
     servers = cursor_servers(project)
 
-    assert servers["postgres"] == {
+    assert servers["agentize-postgres"] == {
         "type": "stdio",
         "command": "postgres-mcp",
         "args": ["--readonly"],
         "env": {"DATABASE_URL": "${env:DATABASE_URL}"},
     }
-    assert servers["github"] == {
+    assert servers["agentize-github"] == {
         "url": "https://api.example.com/mcp",
         "headers": {"Authorization": "Bearer ${env:GITHUB_TOKEN}"},
     }
@@ -120,16 +120,16 @@ def test_cursor_reference_survives_verbatim(project: Path):
 
 def test_agent_profile_gets_fewer_servers(project: Path):
     main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
-    assert sorted(cursor_servers(project)) == ["postgres"]
+    assert sorted(cursor_servers(project)) == ["agentize-postgres"]
 
 
 def test_switching_profile_removes_the_extra_server(project: Path):
     main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
-    assert "github" in cursor_servers(project)
+    assert "agentize-github" in cursor_servers(project)
 
     main(["-C", str(project), "mount", "--host", "cursor", "--profile", "agent"])
 
-    assert "github" not in cursor_servers(project)
+    assert "agentize-github" not in cursor_servers(project)
 
 
 def test_unrelated_cursor_mcp_keys_are_preserved(project: Path):
@@ -139,6 +139,19 @@ def test_unrelated_cursor_mcp_keys_are_preserved(project: Path):
 
     data = json.loads((project / ".cursor" / "mcp.json").read_text(encoding="utf-8"))
     assert data["note"] == "keep"
+
+
+def test_user_mcp_servers_survive_a_mount(project: Path):
+    write(
+        project / ".cursor" / "mcp.json",
+        json.dumps({"mcpServers": {"mine": {"command": "my-server"}}}),
+    )
+
+    main(["-C", str(project), "mount", "--host", "cursor", "--profile", "human"])
+
+    servers = cursor_servers(project)
+    assert servers["mine"] == {"command": "my-server"}
+    assert "agentize-postgres" in servers
 
 
 def test_a_single_word_command_emits_no_args():
@@ -155,21 +168,21 @@ def test_opencode_renders_local_and_remote(project: Path):
     main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
     servers = opencode_servers(project)
 
-    assert servers["postgres"] == {
+    assert servers["agentize-postgres"] == {
         "type": "local",
         "command": ["postgres-mcp", "--readonly"],
         "enabled": True,
     }
-    assert "environment" not in servers["postgres"]
-    assert servers["github"]["type"] == "remote"
-    assert servers["github"]["url"] == "https://api.example.com/mcp"
+    assert "environment" not in servers["agentize-postgres"]
+    assert servers["agentize-github"]["type"] == "remote"
+    assert servers["agentize-github"]["url"] == "https://api.example.com/mcp"
 
 
 def test_opencode_keeps_instructions_alongside_mcp(project: Path):
     main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
     data = json.loads((project / "opencode.json").read_text(encoding="utf-8"))
     assert data["instructions"] == [".agents/shared/style.mdc"]
-    assert sorted(data["mcp"]) == ["github", "postgres"]
+    assert sorted(data["mcp"]) == ["agentize-github", "agentize-postgres"]
 
 
 def test_both_hosts_receive_the_same_server_set(project: Path):
@@ -180,7 +193,7 @@ def test_both_hosts_receive_the_same_server_set(project: Path):
 
 def test_profile_order_is_preserved(project: Path):
     main(["-C", str(project), "mount", "--host", "opencode", "--profile", "human"])
-    assert list(opencode_servers(project)) == ["postgres", "github"]
+    assert list(opencode_servers(project)) == ["agentize-postgres", "agentize-github"]
 
 
 def test_mcp_render_is_idempotent(project: Path):

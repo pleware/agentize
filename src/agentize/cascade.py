@@ -339,3 +339,53 @@ def _cascade(
         if load_mani(child) is not None:
             out.extend(_cascade(child, next_config, next_identities, check=check, seen=visited))
     return out
+
+
+def collect_descendant_servers(
+    root: Path,
+    config: Config,
+    identity: Profile,
+    *,
+    top_root: Path | None = None,
+    seen: set[Path] | None = None,
+) -> dict[str, McpServer]:
+    """Every descendant child's profile servers, rebased to the umbrella root.
+
+    The opencode host uses this under ``hosts.opencode.aggregate_children`` to
+    write one project file carrying every product's MCP. A server already
+    present under the same name and command is not repeated; a genuine name
+    collision keeps both, qualified by the child's path relative to the root.
+    """
+    top = top_root or root
+    visited = seen if seen is not None else set()
+    here = root.resolve()
+    if here in visited:
+        return {}
+    visited.add(here)
+    wanted: dict[str, McpServer] = {}
+    for child in child_dirs(root):
+        child_config = load_child_config(child)
+        if child_config is None or not inherit_spec(child).allows("mcp"):
+            continue
+        merged = overlay_config(config, child_config)
+        ident = identity_for_child(identity, child_config)
+        rebased = rebase_servers(merged, child, top)
+        qualifier = posix_rel(child, top)
+        for server in rebased.servers_for(ident):
+            _merge_descendant(wanted, server, qualifier)
+        if load_mani(child) is not None:
+            wanted.update(
+                collect_descendant_servers(child, merged, ident, top_root=top, seen=visited)
+            )
+    return wanted
+
+
+def _merge_descendant(wanted: dict[str, McpServer], server: McpServer, qualifier: str) -> None:
+    existing = wanted.get(server.name)
+    if existing is None:
+        wanted[server.name] = server
+        return
+    if existing.command == server.command and existing.url == server.url:
+        return  # identical server: dedupe
+    key = f"{qualifier}.{server.name}"
+    wanted[key] = replace(server, name=key)

@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from ..config import McpServer
+from ..config import McpServer, merge_owned_mcp, prefixed_mcp_name
 from ..errors import MountError
 from ..resolve import ResolvedFile
 
@@ -122,7 +122,13 @@ def mcp_entry(server: McpServer) -> dict[str, Any]:
     return entry
 
 
+def _render_mcp(existing: Any, servers: Iterable[McpServer]) -> dict[str, Any]:
+    wanted = {prefixed_mcp_name(server.name): mcp_entry(server) for server in servers}
+    originals = {server.name for server in servers}
+    return merge_owned_mcp(existing, wanted, originals)
+
+
 def render_mcp(existing: dict[str, Any], servers: Iterable[McpServer]) -> str:
     data = dict(existing)
-    data[MCP_KEY] = {server.name: mcp_entry(server) for server in servers}
+    data[MCP_KEY] = _render_mcp(data.get(MCP_KEY), servers)
     return json.dumps(data, indent=2, ensure_ascii=False) + "\n"

@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 import yaml
 
-from agentize.config import ConfigError, identity_label, load_config, parse_config
+from agentize.config import (
+    ConfigError,
+    identity_label,
+    load_config,
+    merge_owned_mcp,
+    parse_config,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -245,3 +251,41 @@ def test_the_default_agent_slug_is_labelled_agent():
     config = parse_config({"version": 1, "agents": {"default": {}}})
 
     assert identity_label(config.resolve_agent("default")) == "agent"
+
+
+def test_aggregate_children_defaults_off():
+    config = parse_config({"version": 1, "hosts": {"opencode": {}}})
+    assert config.hosts["opencode"].aggregate_children is False
+
+
+def test_aggregate_children_is_parsed():
+    config = parse_config(
+        {"version": 1, "hosts": {"opencode": {"aggregate_children": True}}}
+    )
+    assert config.hosts["opencode"].aggregate_children is True
+
+
+def test_merge_owned_mcp_preserves_user_servers():
+    existing = {
+        "mine": {"command": "my-server"},
+        "agentize-stale": {"command": "gone"},
+    }
+    wanted = {"agentize-postgres": {"command": "postgres-mcp"}}
+    originals = {"postgres"}
+
+    result = merge_owned_mcp(existing, wanted, originals)
+
+    assert result == {
+        "mine": {"command": "my-server"},
+        "agentize-postgres": {"command": "postgres-mcp"},
+    }
+
+
+def test_merge_owned_mcp_drops_an_unprefixed_duplicate():
+    existing = {"postgres": {"command": "old"}}
+    wanted = {"agentize-postgres": {"command": "new"}}
+    originals = {"postgres"}
+
+    assert merge_owned_mcp(existing, wanted, originals) == {
+        "agentize-postgres": {"command": "new"}
+    }

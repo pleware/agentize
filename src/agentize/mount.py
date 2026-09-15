@@ -381,7 +381,7 @@ def _plan_opencode(
 ) -> Plan:
     qualify = len(identities) > 1
     resolved_by_path: dict[str, ResolvedFile] = {}
-    servers: list[McpServer] = []
+    server_map: dict[str, McpServer] = {}
     payloads: list[bool | dict[str, LspServer]] = []
     for identity in identities:
         resolved = resolved_for(project_root, config, host="opencode", identity=identity)
@@ -390,10 +390,17 @@ def _plan_opencode(
         qualifier = identity_label(identity) if qualify else None
         for server in config.servers_for(identity):
             bound = bind_server_markers(server, project_root)
-            if qualifier:
-                bound = replace(bound, name=f"{qualifier}.{bound.name}")
-            servers.append(bound)
+            name = f"{qualifier}.{bound.name}" if qualifier else bound.name
+            server_map[name] = replace(bound, name=name)
         payloads.append(config.lsp_payload(identity))
+
+    host = config.hosts.get("opencode")
+    if host is not None and host.aggregate_children and len(identities) == 1:
+        # Deferred import: cascade imports mount at module level.
+        from .cascade import collect_descendant_servers
+
+        for server in collect_descendant_servers(project_root, config, identities[0]).values():
+            server_map.setdefault(server.name, server)
 
     resolved_all = tuple(resolved_by_path.values())
     target = project_root / opencode.CONFIG_FILE
@@ -401,6 +408,7 @@ def _plan_opencode(
     paths = opencode.instruction_paths(resolved_all, config.source)
     plugins = config.hosts["opencode"].plugins
     lsp = _merge_lsp(tuple(payloads))
+    servers = list(server_map.values())
     content = opencode.render_config(
         _read_json(target), resolved_all, servers, config.source, plugins, lsp
     )

@@ -7,12 +7,13 @@ from pathlib import Path
 import yaml
 
 from agentize.cascade import (
+    collect_descendant_servers,
     rebase_command,
     rebase_relpath,
     rebase_servers,
 )
 from agentize.cli import main
-from agentize.config import parse_config
+from agentize.config import load_config, parse_config
 
 PARENT = """\
 version: 1
@@ -95,13 +96,13 @@ def test_mount_plants_mcp_on_existing_children(tmp_path: Path):
     assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
 
     servers = cursor_servers(erp)
-    assert servers["orchestrator"]["args"] == [
+    assert servers["agentize-orchestrator"]["args"] == [
         "run",
         "--directory",
         "../family/orchestrator",
         "family-agent",
     ]
-    assert "atlassian" in servers
+    assert "agentize-atlassian" in servers
     parents = yaml.safe_load((erp / ".agentize" / "parents.yaml").read_text(encoding="utf-8"))
     assert parents["parents"][0]["rel"] == ".."
     assert parents["parents"][0]["kind"] == "workspace"
@@ -147,7 +148,7 @@ def test_child_mcp_list_filters_parent_servers(tmp_path: Path):
     mani_projects(ws, react="react")
 
     assert main(["-C", str(ws), "mount", "--host", "cursor", "--profile", "human"]) == 0
-    assert list(cursor_servers(react)) == ["atlassian"]
+    assert list(cursor_servers(react)) == ["agentize-atlassian"]
 
 
 def test_mount_in_child_without_yaml_inherits(tmp_path: Path):
@@ -159,8 +160,8 @@ def test_mount_in_child_without_yaml_inherits(tmp_path: Path):
     mani_projects(ws, erp="erp")
 
     assert main(["-C", str(erp), "mount", "--host", "cursor", "--profile", "human"]) == 0
-    assert "orchestrator" in cursor_servers(erp)
-    assert cursor_servers(erp)["orchestrator"]["args"][2] == "../family/orchestrator"
+    assert "agentize-orchestrator" in cursor_servers(erp)
+    assert cursor_servers(erp)["agentize-orchestrator"]["args"][2] == "../family/orchestrator"
 
 
 def test_recursive_mani_walk(tmp_path: Path):
@@ -180,9 +181,9 @@ def test_recursive_mani_walk(tmp_path: Path):
     write(ws / "ignite.toml", '[workspace-tree]\nkind = "workspace"\n')
 
     assert main(["-C", str(binder), "mount", "--host", "cursor", "--profile", "human"]) == 0
-    assert "orchestrator" in cursor_servers(erp)
-    assert cursor_servers(ws)["orchestrator"]["args"][2] == "family/orchestrator"
-    assert cursor_servers(erp)["orchestrator"]["args"][2] == "../family/orchestrator"
+    assert "agentize-orchestrator" in cursor_servers(erp)
+    assert cursor_servers(ws)["agentize-orchestrator"]["args"][2] == "family/orchestrator"
+    assert cursor_servers(erp)["agentize-orchestrator"]["args"][2] == "../family/orchestrator"
     chain = yaml.safe_load((erp / ".agentize" / "parents.yaml").read_text(encoding="utf-8"))
     assert [row["rel"] for row in chain["parents"]] == ["..", "../.."]
 
@@ -321,3 +322,90 @@ def test_child_skill_shadows_inherited_parent_skill(tmp_path: Path):
     assert (skills_root / "agentize.auto.generated.deploy" / "SKILL.md").read_text(
         encoding="utf-8"
     ) == "# parent deploy\n"
+
+
+AGGREGATE = """\
+version: 1
+source: .agents
+hosts:
+  opencode:
+    aggregate_children: true
+profiles:
+  human:
+    mcp: [atlassian]
+mcp:
+  servers:
+    atlassian:
+      command: [uvx, mcp-atlassian]
+"""
+
+CHILD_EXTRA = """\
+version: 1
+hosts:
+  opencode: {}
+profiles:
+  human:
+    mcp: [atlassian, postgres]
+mcp:
+  servers:
+    atlassian:
+      command: [uvx, mcp-atlassian]
+    postgres:
+      command: [uv, run, --directory, ../family/orchestrator, postgres-mcp]
+"""
+
+
+def test_collect_descendant_servers_rebases_and_dedupes(tmp_path: Path):
+    ws = tmp_path / "ws"
+    erp = ws / "erp"
+    write(ws / "agentize.yaml", AGGREGATE)
+    erp.mkdir()
+    write(erp / "agentize.yaml", CHILD_EXTRA)
+    mani_projects(ws, erp="erp")
+
+    config = load_config(ws / "agentize.yaml")
+    wanted = collect_descendant_servers(ws, config, config.profiles["human"])
+
+    assert set(wanted) == {"atlassian", "postgres"}
+    assert wanted["postgres"].command == (
+        "uv",
+        "run",
+        "--directory",
+        "family/orchestrator",
+        "postgres-mcp",
+    )
+
+
+def test_mount_opencode_aggregates_child_mcp(tmp_path: Path):
+    ws = tmp_path / "ws"
+    erp = ws / "erp"
+    write(ws / "agentize.yaml", AGGREGATE)
+    erp.mkdir()
+    write(erp / "agentize.yaml", CHILD_EXTRA)
+    mani_projects(ws, erp="erp")
+
+    assert main(["-C", str(ws), "mount", "--host", "opencode", "--profile", "human"]) == 0
+
+    data = json.loads((ws / "opencode.json").read_text(encoding="utf-8"))
+    assert set(data["mcp"]) == {"agentize-atlassian", "agentize-postgres"}
+    assert data["mcp"]["agentize-postgres"]["command"] == [
+        "uv",
+        "run",
+        "--directory",
+        "family/orchestrator",
+        "postgres-mcp",
+    ]
+
+
+def test_mount_opencode_does_not_aggregate_by_default(tmp_path: Path):
+    ws = tmp_path / "ws"
+    erp = ws / "erp"
+    write(ws / "agentize.yaml", AGGREGATE.replace("    aggregate_children: true\n", ""))
+    erp.mkdir()
+    write(erp / "agentize.yaml", CHILD_EXTRA)
+    mani_projects(ws, erp="erp")
+
+    assert main(["-C", str(ws), "mount", "--host", "opencode", "--profile", "human"]) == 0
+
+    data = json.loads((ws / "opencode.json").read_text(encoding="utf-8"))
+    assert set(data["mcp"]) == {"agentize-atlassian"}

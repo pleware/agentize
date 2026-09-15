@@ -41,13 +41,35 @@ TOP_LEVEL_KEYS = frozenset(
         "inherit",
     }
 )
-HOST_KEYS = frozenset({"enabled", "emit_prefix", "plugins", "pin", "user_mcp"})
+HOST_KEYS = frozenset({"enabled", "emit_prefix", "plugins", "pin", "user_mcp", "aggregate_children"})
 GIT_KEYS = frozenset({"user_name", "user_email", "push_remote"})
 PROFILE_KEYS = frozenset({"isolate_data", "git", "mcp", "skills", "lsp"})
 AGENT_KEYS = PROFILE_KEYS | {"needs"}
 MCP_SECTION_KEYS = frozenset({"servers"})
 LSP_SECTION_KEYS = frozenset({"servers"})
 MCP_SERVER_KEYS = frozenset({"command", "url", "env", "headers"})
+MCP_PREFIX = "agentize-"
+
+
+def prefixed_mcp_name(name: str) -> str:
+    return name if name.startswith(MCP_PREFIX) else f"{MCP_PREFIX}{name}"
+
+
+def merge_owned_mcp(existing: Any, wanted: dict[str, Any], originals: set[str]) -> dict:
+    """Merge agentize-owned MCP entries into an existing map, preserving the rest.
+
+    `wanted` maps prefixed keys to their rendered entries; `originals` is the
+    unprefixed set of those names. A key the user wrote without the prefix stays;
+    a stale prefixed key and an unprefixed duplicate of an owned name go away.
+    """
+    servers = dict(existing) if isinstance(existing, dict) else {}
+    for key in list(servers):
+        stale = key.startswith(MCP_PREFIX) and key not in wanted
+        duplicate = key in originals and not key.startswith(MCP_PREFIX)
+        if stale or duplicate:
+            del servers[key]
+    servers.update(wanted)
+    return servers
 LSP_SERVER_KEYS = frozenset({"command", "extensions", "env", "initialization", "disabled"})
 SKILLS_KEYS = frozenset({"lock"})
 WORKTREE_KEYS = frozenset({"dir"})
@@ -93,6 +115,9 @@ class Host:
     user_mcp: bool = False
     """Cursor only: also sync prefixed keys into ``~/.cursor/mcp.json``.
     Default is on for ``cursor`` so Customize lists them in multi-root windows."""
+    aggregate_children: bool = False
+    """OpenCode only: also render every descendant child's MCP servers into this
+    project's own file, so opening the workspace root exposes the products' MCP."""
 
 
 @dataclass(frozen=True)
@@ -391,6 +416,9 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
             user_mcp = user_mcp_raw
         else:
             raise ConfigError(f"{where}.user_mcp must be true or false")
+        aggregate_children_raw = body.get("aggregate_children", False)
+        if not isinstance(aggregate_children_raw, bool):
+            raise ConfigError(f"{where}.aggregate_children must be true or false")
         hosts[name] = Host(
             name=name,
             enabled=enabled,
@@ -398,6 +426,7 @@ def _parse_hosts(raw: Any, origin: str) -> dict[str, Host]:
             plugins=plugins,
             pin=_optional_str(body.get("pin"), f"{where}.pin"),
             user_mcp=user_mcp,
+            aggregate_children=aggregate_children_raw,
         )
     return hosts
 
