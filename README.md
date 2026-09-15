@@ -48,24 +48,29 @@ Add `agentize.yaml` (and, for bots, `ignite.toml` + `mise.toml`) and run `./agen
 ## Commands
 
 ```sh
-./agentize               # trampoline: uvx refreshes this tool, then runs it
-./agentize fetch              # first copy of each host into .agentize/hosts/
-./agentize run --agent php    # plant ignite if needed, ensure tools, mount, start
-./agentize run --global       # escape hatch: the host on PATH
-./agentize mount --agent php  # render without starting
-./agentize mount --profile-all  # render every declared identity, side by side
-./agentize mount --check      # CI gate: fail if the rendered output is stale
-./agentize cleanup       # remove .agentize/ and planted launchers
-./agentize --cleanup --home  # also remove ~/.agentize/
+./agentize fetch                              # first copy of each host into .agentize/hosts/
+./agentize run --profile edmund --host opencode   # mount for one host, then start it
+./agentize run --agent php --host opencode    # an agent slug instead of a profile
+./agentize run --global --host opencode       # escape hatch: the host on PATH
+./agentize mount --profile edmund --host opencode  # render one identity for one host
+./agentize mount --profile-all --host cursor  # render every identity, side by side
+./agentize mount --profile edmund --host opencode --check  # CI gate: fail if stale
+./agentize cleanup                            # remove .agentize/ and planted launchers
+./agentize --cleanup --home                   # also remove ~/.agentize/
 ```
+
+`run` and `mount` both name **who** (`--profile`, `--agent`, or
+`--profile-all`) and **where** (`--host`) every time. There is no default and
+no remembered host — a bare `agentize` no longer starts anything.
 
 <small>See <a href="#toolchain">Toolchain</a> for <code>ignite.toml</code>, <code>needs</code>, and where the kit lands.</small>
 
 ### Cascade
 
-`mount` at a directory that has `mani.yaml` always walks that registry and
-plants inherited Cursor MCP into every existing child (then each child's own
-`mani.yaml`). No `--cascade` flag.
+`mount --host cursor` at a directory that has `mani.yaml` always walks that
+registry and plants inherited Cursor MCP into every existing child (then each
+child's own `mani.yaml`). No `--cascade` flag — cascade is the cursor host's
+work, so it happens only when `--host cursor`.
 
 A child listed in `mani.yaml` does not need `agentize.yaml`. Membership plus
 an observed parent is enough. Child policy merges on top (child wins).
@@ -108,10 +113,11 @@ An unresolved marker is dropped so runtime discovery can still find the tree.
 
 ### Every identity at once (`--profile-all`)
 
-`mount --profile-all` renders every declared identity — every entry under
-`profiles:` and every slug under `agents:` (so `agents.default` is labelled
-`agent`, like its Hermes home) — instead of the selected one. `run` is
-unaffected: it still starts a single identity, because it starts a process.
+`mount --profile-all --host <host>` renders every declared identity for that
+host — every entry under `profiles:` and every slug under `agents:` (so
+`agents.default` is labelled `agent`, like its Hermes home) — instead of the
+selected one. `run` is unaffected: it still starts a single identity, because
+it starts a process.
 
 One project file holds one flat set of names, so the identity goes into the
 name and nothing overwrites anything:
@@ -172,7 +178,7 @@ those profile directories. The default Hermes Desktop home is not rewritten.
 
 `cursor` here is the **agent CLI** (`agent` / `cursor-agent`), not the desktop editor.
 
-<small><code>run</code> never copies a shim from <code>PATH</code>. A missing copy is an error that names <code>agentize fetch</code>. After that first copy, leave the binary alone: Cursor Agent (<code>agent update</code>) and OpenCode refresh themselves in the same tree. The last host, profile and agent slug are stored in <code>.agentize/last.yaml</code> (and a copy under <code>~/.agentize/</code>). That is why a bare <code>agentize</code> is enough the second time — and why it still works in a directory that has no <code>agentize.yaml</code> yet. The committed file is never rewritten on launch.</small>
+<small><code>run</code> never copies a shim from <code>PATH</code>. A missing copy is an error that names <code>agentize fetch</code>. After that first copy, leave the binary alone: Cursor Agent (<code>agent update</code>) and OpenCode refresh themselves in the same tree. Every launch names <code>--host</code> and the identity; nothing is remembered between runs, so there is no bare-<code>agentize</code> shortcut and no <code>last.yaml</code> fallback.</small>
 
 ## Why
 
@@ -277,7 +283,6 @@ hosts:
     emit_prefix: agentize.auto.generated.
     pin: latest                 # or omit; Cursor Agent updates itself
   opencode:
-    default: true               # bare `agentize` starts this until last.yaml remembers
     pin: latest                 # or omit; OpenCode updates itself
     plugins:
       - opencode-extended-sidebar  # TUI sidebar; omitted plugins default to this
@@ -288,7 +293,6 @@ hosts:
 
 profiles:
   human:
-    default: true
     # No git block: a human's identity differs per teammate.
     # It comes from the machine file, not the repository.
     mcp: [postgres, github, sentry]
@@ -351,7 +355,6 @@ worktree:
   agentize.cmd
   agentize.yaml        policy — commit this (pin: latest is the default shape)
   .agentize/           machine state — ignores itself
-    last.yaml              last host, profile and agent slug — not committed
     hosts/
       opencode/
         versions/latest/     unpacked fetch; the host may overwrite
@@ -361,7 +364,6 @@ worktree:
   .agents/             rules and project-owned skills — commit these
 
 ~/.agentize/           # or $AGENTIZE_HOME — machine, not the project
-  last.yaml
   ignite/<pin>/        planted ignite kit (`ensure.sh`); shared by checkouts
 
 <hermes-root>/profiles/agentize-<identity>/
@@ -420,7 +422,7 @@ agents:
 
 ### What `run --agent` does
 
-`run --agent php` then:
+`run --agent php --host opencode` then:
 
 1. Reads `[kit] pin` from `ignite.toml` (missing file or missing pin is an error).
 2. Clones that ref into `~/.agentize/ignite/<pin>/` if `ensure.sh` is not there.
