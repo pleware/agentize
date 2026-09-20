@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -672,11 +673,20 @@ def _materialize_agent(base: AgentSpec, overlay: AgentSpec, name: str) -> Profil
 def _jsonish(value: Any, where: str) -> Any:
     if value is None or isinstance(value, (bool, int, float, str)):
         return value
+    # YAML resolves an unquoted date or timestamp into a Python object, and JSON has
+    # no such type. Render it as its ISO string so a passthrough block accepts any
+    # key, and the quoted and unquoted spellings agree instead of one of them
+    # refusing to mount.
+    if isinstance(value, (datetime.date, datetime.datetime)):
+        return value.isoformat()
     if isinstance(value, list):
         return [_jsonish(item, f"{where}[{index}]") for index, item in enumerate(value)]
     if isinstance(value, dict):
         return {str(key): _jsonish(item, f"{where}.{key}") for key, item in value.items()}
-    raise ConfigError(f"{where}: expected a JSON value, got {type(value).__name__}")
+    raise ConfigError(
+        f"{where}: {type(value).__name__} has no JSON form — quote the value to pass "
+        f"it through as text, or drop the key"
+    )
 
 
 def _check_no_literal_secrets(values: dict[str, str], where: str) -> None:

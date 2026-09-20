@@ -386,6 +386,12 @@ the rendered file as-is, so a new OpenCode option needs no agentize release. Thr
   holding a stray `$`.
 - **An absent section changes nothing.** Omit them and whatever the rendered file already
   holds stays as it is (mounts do not strip a hand-set section).
+- **Any key, any JSON value.** The key set belongs to OpenCode, so agentize keeps no
+  allow-list: nested maps, lists, booleans, `null` and unusual key spellings (`a.dotted.key`,
+  `key with spaces`, a numeric key) all pass through. A bare YAML date or timestamp
+  (`2026-09-20`, `2026-09-20T04:53:00`) renders as its ISO text — JSON has no date type, so
+  the quoted and unquoted spellings agree instead of one of them refusing to mount. Only a
+  value with no JSON form at all (YAML `!!binary`) is refused, and the message names the fix.
 - **A present `provider` block is validated**, not trusted: a mapping of mappings, and the
   same "looks like a secret but holds a literal value" guard as `mcp:`, applied at every
   depth — so a committed `agentize.yaml` cannot carry an API key.

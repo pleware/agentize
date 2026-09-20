@@ -66,6 +66,86 @@ def test_experimental_is_rendered(project: Path):
     assert rendered(project)["experimental"] == {"mcp_timeout": 30000}
 
 
+ARBITRARY_EXPERIMENTAL = """\
+version: 1
+source: .agents
+hosts:
+  opencode: {}
+profiles:
+  human: {}
+experimental:
+  mcp_timeout: 180000
+  flag: true
+  ratio: 1.5
+  nothing: null
+  text: napis
+  nested:
+    a:
+      b:
+        c: [1, 2, {d: glebiej}]
+  a.dotted.key: 1
+  "key with spaces": 2
+  "key:with:colons": 3
+  1: numeral-as-key
+  allowed_tools: [read, write]
+  empty_section: {}
+"""
+
+
+def test_experimental_accepts_any_key_and_any_json_value(tmp_path: Path):
+    """The block is OpenCode's, so agentize never keeps a list of allowed keys."""
+    write(tmp_path / "agentize.yaml", ARBITRARY_EXPERIMENTAL)
+    write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
+
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human"]) == 0
+
+    assert rendered(tmp_path)["experimental"] == {
+        "mcp_timeout": 180000,
+        "flag": True,
+        "ratio": 1.5,
+        "nothing": None,
+        "text": "napis",
+        "nested": {"a": {"b": {"c": [1, 2, {"d": "glebiej"}]}}},
+        "a.dotted.key": 1,
+        "key with spaces": 2,
+        "key:with:colons": 3,
+        "1": "numeral-as-key",
+        "allowed_tools": ["read", "write"],
+        "empty_section": {},
+    }
+
+
+def test_a_bare_yaml_date_renders_as_iso_text(tmp_path: Path):
+    """PyYAML turns `2026-09-20` into a date; JSON has no such type, and refusing the
+    mount over it is the difference between "any key" and "any value"."""
+    write(
+        tmp_path / "agentize.yaml",
+        "version: 1\n"
+        "source: .agents\n"
+        "hosts:\n"
+        "  opencode: {}\n"
+        "profiles:\n"
+        "  human: {}\n"
+        "experimental:\n"
+        "  updated_at: 2026-09-20\n"
+        "  at: 2026-09-20T04:53:00\n"
+        '  quoted: "2026-09-20"\n',
+    )
+    write(tmp_path / ".agents" / "shared" / "style.mdc", "style\n")
+
+    assert main(["-C", str(tmp_path), "mount", "--host", "opencode", "--profile", "human"]) == 0
+
+    experimental = rendered(tmp_path)["experimental"]
+    assert experimental["updated_at"] == "2026-09-20"
+    assert experimental["at"] == "2026-09-20T04:53:00"
+    assert experimental["quoted"] == "2026-09-20"  # quoted and bare agree
+
+
+def test_a_value_with_no_json_form_names_the_fix():
+    with pytest.raises(ConfigError, match="has no JSON form"):
+        parse_config({"version": 1, "experimental": {"blob": b"hi"}})
+
+
 def test_absent_sections_leave_existing_keys_untouched(tmp_path: Path):
     write(
         tmp_path / "agentize.yaml",
