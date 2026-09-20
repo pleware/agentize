@@ -222,6 +222,14 @@ def mount_plans_all(
     root: Path, config, identities: tuple[Profile, ...], host_name: str
 ) -> list[Plan]:
     """One plan per host holding every identity, so pruning sees the union."""
+    if not identities:
+        # An identity-free binder (hosts + mcp, no profiles/agents) has nothing to
+        # mount. Without this the AGENTS.md plan indexes groups[0] and dies with an
+        # IndexError, which reads as a broken tool instead of a binder with no identity.
+        raise ConfigError(
+            f"{config_path(root)}: no profiles or agents declared — nothing to mount"
+            " (declare `profiles:` or `agents:`)"
+        )
     plans = [plan_agents_md_all(root, config, identities)]
     for host in config.enabled_hosts():
         if host.name != host_name:

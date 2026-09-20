@@ -213,6 +213,13 @@ def test_unknown_profile_fails_with_a_message(project: Path, capsys):
     assert "unknown profile 'robot'" in capsys.readouterr().err
 
 
+def test_profile_all_without_identities_names_the_gap(project: Path, capsys):
+    write(project / "agentize.yaml", "version: 1\nhosts:\n  cursor: {}\n")
+
+    assert main(["-C", str(project), "mount", "--host", "cursor", "--profile-all"]) == 1
+    assert "no profiles or agents declared" in capsys.readouterr().err
+
+
 # --- mount --check ---
 
 
