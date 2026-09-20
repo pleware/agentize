@@ -356,11 +356,39 @@ mcp:
     sentry:
       url: https://mcp.sentry.dev/mcp
 
+provider:
+  deepseek:                       # OpenCode's provider block, passed through
+    npm: "@ai-sdk/openai-compatible"
+    name: DeepSeek
+    options:
+      baseURL: https://api.deepseek.com/v1
+      apiKey: ${env:DEEPSEEK_API_KEY}   # rewritten to OpenCode's {env:DEEPSEEK_API_KEY}
+    models:
+      deepseek-chat:
+        name: DeepSeek Chat
+
+experimental:
+  mcp_timeout: 180000             # OpenCode's experimental block, passed through
+
 worktree:
   dir: .agentize_worktrees
 ```
 
 <small>Secrets are never written into a project file. <code>${env:...}</code> is a reference; values are injected into the host process at launch, from a machine-level file outside the repository. Git identity is set as process environment. agentize never runs <code>git config --local</code>. YAML for the source because it nests and takes comments. The output formats are not a choice — each host dictates its own.</small>
+
+### Pass-through blocks (`provider`, `experimental`)
+
+Both are OpenCode's own sections. agentize does not model them — it hands the block to
+the rendered file as-is, so a new OpenCode option needs no agentize release. Three rules:
+
+- **`${env:VAR}` is rewritten to OpenCode's `{env:VAR}`.** OpenCode substitutes its own
+  syntax in the file text *before* parsing, so a block agentize writes must not be left
+  holding a stray `$`.
+- **An absent section changes nothing.** Omit them and whatever the rendered file already
+  holds stays as it is (mounts do not strip a hand-set section).
+- **A present `provider` block is validated**, not trusted: a mapping of mappings, and the
+  same "looks like a secret but holds a literal value" guard as `mcp:`, applied at every
+  depth — so a committed `agentize.yaml` cannot carry an API key.
 
 ### Store tree
 

@@ -36,6 +36,8 @@ TOP_LEVEL_KEYS = frozenset(
         "agents",
         "mcp",
         "lsp",
+        "provider",
+        "experimental",
         "skills",
         "worktree",
         "inherit",
@@ -239,6 +241,10 @@ class Config:
     servers: dict[str, McpServer]
     agents: dict[str, AgentSpec] = field(default_factory=dict)
     lsp_servers: dict[str, LspServer] = field(default_factory=dict)
+    provider: dict[str, Any] | None = None
+    """OpenCode's `provider` block, or None when the section is absent."""
+    experimental: dict[str, Any] | None = None
+    """OpenCode's `experimental` block, or None when the section is absent."""
     skills_lock: Path | None = None
     worktree_dir: str | None = None
     inherit: InheritSpec = field(default_factory=InheritSpec)
@@ -354,6 +360,8 @@ def parse_config(
     profiles = _parse_profiles(data.get("profiles"), origin)
     servers = _parse_servers(data.get("mcp"), origin, declared_at=declared_root)
     lsp_servers = _parse_lsp_servers(data.get("lsp"), origin)
+    provider = _parse_provider(data.get("provider"), origin)
+    experimental = _parse_experimental(data.get("experimental"), origin)
     agents = _parse_agents(data.get("agents"), origin)
 
     _check_references(profiles, servers, origin)
@@ -380,6 +388,8 @@ def parse_config(
         servers=servers,
         agents=agents,
         lsp_servers=lsp_servers,
+        provider=provider,
+        experimental=experimental,
         skills_lock=Path(lock) if lock else None,
         worktree_dir=worktree_dir,
         inherit=_parse_inherit(data.get("inherit"), origin),
@@ -601,6 +611,31 @@ def _parse_lsp_servers(raw: Any, origin: str) -> dict[str, LspServer]:
     return servers
 
 
+def _parse_provider(raw: Any, origin: str) -> dict[str, Any] | None:
+    """OpenCode's `provider` block: provider id -> provider config.
+
+    Absent means "leave whatever the rendered file already has". A present
+    section must be a mapping of mappings, and a secret-shaped option holds a
+    `${...}` reference, because this file is committed.
+    """
+    if raw is None:
+        return None
+    where = f"{origin}: provider"
+    body = _mapping(raw, where)
+    for name, value in body.items():
+        _mapping(value, f"{where}.{name}")
+    _check_no_literal_secrets_deep(body, where)
+    return _jsonish(body, where)
+
+
+def _parse_experimental(raw: Any, origin: str) -> dict[str, Any] | None:
+    """OpenCode's `experimental` block. Absent means "leave the file alone"."""
+    if raw is None:
+        return None
+    where = f"{origin}: experimental"
+    return _jsonish(_mapping(raw, where), where)
+
+
 def _materialize_agent(base: AgentSpec, overlay: AgentSpec, name: str) -> Profile:
     isolate = (
         overlay.isolate_data if "isolate_data" in overlay.present else base.isolate_data
@@ -656,6 +691,19 @@ def _check_no_literal_secrets(values: dict[str, str], where: str) -> None:
                 f"{where}.{key} looks like a secret but holds a literal value. "
                 f"Use a reference such as ${{env:{key.upper()}}} — this file is committed."
             )
+
+
+def _check_no_literal_secrets_deep(value: Any, where: str) -> None:
+    """Apply the secret guard at every level of a nested mapping."""
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if isinstance(item, str):
+                _check_no_literal_secrets({str(key): item}, where)
+            else:
+                _check_no_literal_secrets_deep(item, f"{where}.{key}")
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            _check_no_literal_secrets_deep(item, f"{where}[{index}]")
 
 
 def _check_mcp_names(names: tuple[str, ...], servers: dict[str, McpServer], where: str) -> None:

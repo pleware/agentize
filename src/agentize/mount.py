@@ -410,7 +410,14 @@ def _plan_opencode(
     lsp = _merge_lsp(tuple(payloads))
     servers = list(server_map.values())
     content = opencode.render_config(
-        _read_json(target), resolved_all, servers, config.source, plugins, lsp
+        _read_json(target),
+        resolved_all,
+        servers,
+        config.source,
+        plugins,
+        lsp,
+        config.provider,
+        config.experimental,
     )
 
     prefix = config.hosts["opencode"].emit_prefix or skills.DEFAULT_PREFIX

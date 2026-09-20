@@ -8,6 +8,7 @@ overriding a shared rule — it would match both.
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -28,8 +29,15 @@ INSTRUCTIONS_KEY = "instructions"
 MCP_KEY = "mcp"
 PLUGIN_KEY = "plugin"
 LSP_KEY = "lsp"
+PROVIDER_KEY = "provider"
+EXPERIMENTAL_KEY = "experimental"
 PERMISSION_KEY = "permission"
 RULE_SUFFIX = ".mdc"
+
+ENV_SUB = re.compile(r"\$\{env:([^}]+)\}")
+"""OpenCode substitutes `{env:VAR}` (single braces, no `$`) in the file text
+before JSON parse. agentize writes `${env:VAR}`, so a block agentize owns must
+be translated or OpenCode would leave a stray `$` behind."""
 
 # Short names we accept in agentize.yaml. The value is what OpenCode puts on npm.
 KNOWN_PLUGINS = {
@@ -127,6 +135,17 @@ def render_lsp(payload: bool | dict[str, LspServer]) -> bool | dict[str, Any]:
     return {name: lsp_entry(server) for name, server in payload.items()}
 
 
+def translate_env_refs(value: Any) -> Any:
+    """Rewrite agentize's `${env:VAR}` to OpenCode's `{env:VAR}`, recursively."""
+    if isinstance(value, str):
+        return ENV_SUB.sub(lambda match: "{env:" + match.group(1) + "}", value)
+    if isinstance(value, dict):
+        return {key: translate_env_refs(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [translate_env_refs(item) for item in value]
+    return value
+
+
 def render_config(
     existing: dict[str, Any],
     resolved: Iterable[ResolvedFile],
@@ -134,12 +153,18 @@ def render_config(
     source: Path,
     plugins: Iterable[str] = (),
     lsp: bool | dict[str, LspServer] = False,
+    provider: dict[str, Any] | None = None,
+    experimental: dict[str, Any] | None = None,
 ) -> str:
     data = dict(existing)
     data[INSTRUCTIONS_KEY] = instruction_paths(resolved, source)
     data[MCP_KEY] = _render_mcp(data.get(MCP_KEY), servers)
     data[PLUGIN_KEY] = server_plugin_specs(plugins)
     data[LSP_KEY] = render_lsp(lsp)
+    if provider is not None:
+        data[PROVIDER_KEY] = translate_env_refs(provider)
+    if experimental is not None:
+        data[EXPERIMENTAL_KEY] = translate_env_refs(experimental)
     permission = dict(data.get(PERMISSION_KEY) or {})
     permission["lsp"] = "allow" if lsp else "deny"
     data[PERMISSION_KEY] = permission
