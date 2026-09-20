@@ -1,6 +1,6 @@
 [project]
 name = "agentize"
-version = "0.1.0.dev0"
+version = "0.1.1"
 description = "One project config. Every agent host."
 readme = "README.md"
 requires-python = ">=3.11"
